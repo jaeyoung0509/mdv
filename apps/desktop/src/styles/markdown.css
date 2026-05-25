@@ -1,0 +1,220 @@
+.mdv-markdown {
+  max-width: 820px;
+  margin: 0 auto;
+  background: transparent;
+  color: var(--app-text);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 16px;
+  line-height: 1.65;
+}
+
+.mdv-markdown.markdown-body {
+  --color-accent-fg: var(--app-accent);
+  --color-border-default: var(--app-border);
+  --color-canvas-default: transparent;
+  --color-canvas-subtle: var(--app-surface-raised);
+  --color-fg-default: var(--app-text);
+  --color-fg-muted: var(--app-muted);
+  --color-neutral-muted: color-mix(in srgb, var(--app-border) 64%, transparent);
+}
+
+.mdv-markdown h1,
+.mdv-markdown h2,
+.mdv-markdown h3,
+.mdv-markdown h4,
+.mdv-markdown h5,
+.mdv-markdown h6 {
+  color: var(--app-text);
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.mdv-markdown h1 {
+  margin-top: 0;
+  font-size: 2.15em;
+}
+
+.mdv-markdown h2 {
+  font-size: 1.55em;
+}
+
+.mdv-markdown h3 {
+  font-size: 1.25em;
+}
+
+.mdv-markdown a {
+  color: var(--app-accent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.heading-anchor {
+  margin-left: 8px;
+  color: var(--app-muted);
+  font-size: 0.78em;
+  opacity: 0;
+  text-decoration: none;
+}
+
+.mdv-markdown :is(h1, h2, h3, h4, h5, h6):hover .heading-anchor {
+  opacity: 1;
+}
+
+.mdv-markdown code {
+  border-radius: 5px;
+  background: var(--app-surface-raised);
+  color: var(--app-text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.88em;
+  padding: 0.16em 0.34em;
+}
+
+.mdv-markdown pre {
+  background: transparent;
+}
+
+.code-block {
+  overflow: hidden;
+  margin: 18px 0;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: var(--app-surface);
+}
+
+.code-block__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 36px;
+  border-bottom: 1px solid var(--app-border);
+  background: var(--app-surface-raised);
+  padding: 0 8px 0 12px;
+  color: var(--app-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+}
+
+.code-block__content {
+  overflow: auto;
+}
+
+.code-block__content .shiki {
+  overflow: auto;
+  margin: 0;
+  background: transparent !important;
+  padding: 16px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 14px;
+  line-height: 1.58;
+}
+
+.code-block__content code {
+  display: block;
+  min-width: max-content;
+  background: transparent;
+  padding: 0;
+}
+
+.code-block__fallback {
+  overflow: auto;
+  margin: 0;
+  background: transparent;
+  padding: 16px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 14px;
+  line-height: 1.58;
+}
+
+.mermaid-block,
+.mermaid-loading,
+.mermaid-error {
+  margin: 22px 0;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: var(--app-surface);
+  padding: 18px;
+}
+
+.mermaid-block {
+  overflow: auto;
+  text-align: center;
+}
+
+.mermaid-block svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.mermaid-loading {
+  color: var(--app-muted);
+}
+
+.mermaid-error {
+  border-color: color-mix(in srgb, var(--app-error) 35%, var(--app-border));
+  background: var(--app-error-bg);
+  color: var(--app-error);
+}
+
+.mermaid-error pre {
+  overflow: auto;
+  margin: 12px 0;
+  border-radius: 7px;
+  background: var(--app-surface);
+  padding: 12px;
+  color: var(--app-text);
+}
+
+.mermaid-error details {
+  color: var(--app-muted);
+  font-size: 13px;
+}
+
+.missing-image {
+  display: block;
+  margin: 16px 0;
+  border: 1px dashed var(--app-border-strong);
+  border-radius: 8px;
+  background: var(--app-surface-raised);
+  color: var(--app-muted);
+  padding: 16px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.mdv-markdown table {
+  display: table;
+  width: 100%;
+}
+
+.mdv-markdown img {
+  max-width: 100%;
+  border-radius: 6px;
+}
+
+.mdv-markdown blockquote {
+  color: var(--app-muted);
+  border-left-color: var(--app-border-strong);
+}
+
+.mdv-markdown .contains-task-list {
+  padding-left: 1.4em;
+}
+
+.mdv-markdown input[type="checkbox"] {
+  margin-right: 0.45em;
+}
+
+@media (max-width: 720px) {
+  .mdv-markdown {
+    font-size: 15px;
+  }
+
+  .mdv-markdown h1 {
+    font-size: 1.8em;
+  }
+
+  .mdv-markdown table {
+    display: block;
+  }
+}

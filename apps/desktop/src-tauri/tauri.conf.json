@@ -1,0 +1,32 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "mdv",
+  "version": "0.1.0",
+  "identifier": "com.ejaebbang.mdv",
+  "build": {
+    "beforeDevCommand": "pnpm dev:frontend",
+    "devUrl": "http://127.0.0.1:1420",
+    "beforeBuildCommand": "pnpm build:frontend",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "mdv",
+        "width": 1040,
+        "height": 760,
+        "minWidth": 640,
+        "minHeight": 480,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' asset: data: https: http:; style-src 'self' 'unsafe-inline'; script-src 'self'; font-src 'self' data:"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app", "dmg"],
+    "icon": []
+  }
+}

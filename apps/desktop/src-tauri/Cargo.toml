@@ -1,0 +1,24 @@
+[package]
+name = "mdv"
+version = "0.1.0"
+description = "Fast, beautiful Markdown viewer"
+authors = ["ejaebbang"]
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "mdv_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+base64 = "0.22"
+mime_guess = "2"
+notify = "8"
+open = "5"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "2", features = [] }
+url = "2"

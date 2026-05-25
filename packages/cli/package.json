@@ -1,0 +1,19 @@
+{
+  "name": "@ejaebbang/mdv",
+  "version": "0.1.0",
+  "description": "Fast, beautiful Markdown viewer from the terminal",
+  "type": "module",
+  "bin": {
+    "mdv": "./bin/mdv.js"
+  },
+  "files": [
+    "bin"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "check": "node ./bin/mdv.js --help"
+  },
+  "license": "MIT"
+}
