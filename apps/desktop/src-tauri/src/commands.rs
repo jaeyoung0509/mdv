@@ -15,7 +15,7 @@ use url::Url;
 struct RuntimeConfig {
     input_path: String,
     cwd: PathBuf,
-    theme: String,
+    preferences: ReaderPreferences,
     watch: bool,
     allow_html: bool,
 }
@@ -25,7 +25,7 @@ impl Default for RuntimeConfig {
         Self {
             input_path: ".".to_string(),
             cwd: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
-            theme: "system".to_string(),
+            preferences: ReaderPreferences::default(),
             watch: true,
             allow_html: false,
         }
@@ -58,7 +58,7 @@ pub struct DocumentPayload {
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InitialState {
-    theme: String,
+    preferences: ReaderPreferences,
     watch: bool,
     allow_html: bool,
     document: Option<DocumentPayload>,
@@ -85,9 +85,34 @@ pub struct FileMetadata {
     modified_millis: Option<u128>,
 }
 
-#[derive(Default, Deserialize, Serialize)]
-struct Preferences {
-    theme: Option<String>,
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReaderPreferences {
+    #[serde(default = "default_theme")]
+    theme: String,
+    #[serde(default = "default_font_preset")]
+    font_preset: String,
+    #[serde(default = "default_font_size")]
+    font_size: u16,
+    #[serde(default = "default_line_height")]
+    line_height: f32,
+    #[serde(default = "default_content_width")]
+    content_width: u16,
+    #[serde(default = "default_outline_visible")]
+    outline_visible: bool,
+}
+
+impl Default for ReaderPreferences {
+    fn default() -> Self {
+        Self {
+            theme: default_theme(),
+            font_preset: default_font_preset(),
+            font_size: default_font_size(),
+            line_height: default_line_height(),
+            content_width: default_content_width(),
+            outline_visible: default_outline_visible(),
+        }
+    }
 }
 
 impl MdvError {
@@ -164,7 +189,7 @@ pub fn get_initial_state(state: State<'_, SharedState>) -> InitialState {
     };
 
     InitialState {
-        theme: config.theme,
+        preferences: config.preferences,
         watch: config.watch,
         allow_html: config.allow_html,
         document,
@@ -199,6 +224,31 @@ pub fn resolve_input_path(input_path: String) -> Result<String, MdvError> {
 }
 
 #[tauri::command]
+pub fn open_document(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    path: String,
+) -> Result<DocumentPayload, MdvError> {
+    open_document_from_input(&app, &state, &path)
+}
+
+#[tauri::command]
+pub fn pick_markdown_file(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+) -> Result<Option<DocumentPayload>, MdvError> {
+    let Some(path) = rfd::FileDialog::new()
+        .set_title("Open Markdown")
+        .add_filter("Markdown", &["md", "markdown"])
+        .pick_file()
+    else {
+        return Ok(None);
+    };
+
+    open_document_from_input(&app, &state, &path.display().to_string()).map(Some)
+}
+
+#[tauri::command]
 pub fn get_file_metadata(path: String) -> Result<FileMetadata, MdvError> {
     metadata_for_path(&PathBuf::from(path))
 }
@@ -215,7 +265,9 @@ pub fn watch_file(
     let document = read_document_at(&resolved, true)?;
 
     let mut inner = state.inner.lock().expect("runtime state poisoned");
+    inner.config.input_path = path;
     inner.document_path = Some(resolved);
+    inner.initial_error = None;
     inner.watcher = Some(watcher);
 
     Ok(document)
@@ -299,23 +351,40 @@ pub fn save_theme_preference(
     state: State<'_, SharedState>,
 ) -> Result<String, MdvError> {
     let theme = normalize_theme(&theme);
-    let preferences = Preferences {
-        theme: Some(theme.clone()),
+    let mut preferences = {
+        let inner = state.inner.lock().expect("runtime state poisoned");
+        inner.config.preferences.clone()
     };
+    preferences.theme = theme.clone();
+    let preferences = normalize_reader_preferences(preferences);
 
     save_preferences(&preferences)?;
 
     let mut inner = state.inner.lock().expect("runtime state poisoned");
-    inner.config.theme = theme.clone();
+    inner.config.preferences = preferences;
 
     Ok(theme)
 }
 
+#[tauri::command]
+pub fn save_reader_preferences(
+    preferences: ReaderPreferences,
+    state: State<'_, SharedState>,
+) -> Result<ReaderPreferences, MdvError> {
+    let preferences = normalize_reader_preferences(preferences);
+    save_preferences(&preferences)?;
+
+    let mut inner = state.inner.lock().expect("runtime state poisoned");
+    inner.config.preferences = preferences.clone();
+
+    Ok(preferences)
+}
+
 fn parse_cli_args() -> RuntimeConfig {
-    let mut config = RuntimeConfig::default();
-    if let Some(theme) = load_preferences().theme {
-        config.theme = normalize_theme(&theme);
-    }
+    let mut config = RuntimeConfig {
+        preferences: load_preferences(),
+        ..RuntimeConfig::default()
+    };
 
     let mut args = std::env::args().skip(1);
 
@@ -326,12 +395,12 @@ fn parse_cli_args() -> RuntimeConfig {
             "--allow-html" => config.allow_html = true,
             "--theme" => {
                 if let Some(value) = args.next() {
-                    config.theme = normalize_theme(&value);
+                    config.preferences.theme = normalize_theme(&value);
                 }
             }
             _ if arg.starts_with("--theme=") => {
                 let value = arg.trim_start_matches("--theme=");
-                config.theme = normalize_theme(value);
+                config.preferences.theme = normalize_theme(value);
             }
             _ if arg.starts_with('-') => {}
             _ => {
@@ -345,19 +414,21 @@ fn parse_cli_args() -> RuntimeConfig {
     config
 }
 
-fn load_preferences() -> Preferences {
+fn load_preferences() -> ReaderPreferences {
     let Some(path) = preferences_path() else {
-        return Preferences::default();
+        return ReaderPreferences::default();
     };
 
     let Ok(content) = fs::read_to_string(path) else {
-        return Preferences::default();
+        return ReaderPreferences::default();
     };
 
-    serde_json::from_str(&content).unwrap_or_default()
+    serde_json::from_str(&content)
+        .map(normalize_reader_preferences)
+        .unwrap_or_default()
 }
 
-fn save_preferences(preferences: &Preferences) -> Result<(), MdvError> {
+fn save_preferences(preferences: &ReaderPreferences) -> Result<(), MdvError> {
     let path = preferences_path().ok_or_else(|| {
         MdvError::new(
             "PreferencesError",
@@ -447,6 +518,50 @@ fn normalize_theme(value: &str) -> String {
     }
 }
 
+fn normalize_font_preset(value: &str) -> String {
+    match value {
+        "sans" | "serif" | "mono" => value.to_string(),
+        _ => "sans".to_string(),
+    }
+}
+
+fn normalize_reader_preferences(mut preferences: ReaderPreferences) -> ReaderPreferences {
+    preferences.theme = normalize_theme(&preferences.theme);
+    preferences.font_preset = normalize_font_preset(&preferences.font_preset);
+    preferences.font_size = preferences.font_size.clamp(14, 22);
+    preferences.line_height = if preferences.line_height.is_finite() {
+        preferences.line_height.clamp(1.45, 1.95)
+    } else {
+        default_line_height()
+    };
+    preferences.content_width = preferences.content_width.clamp(680, 960);
+    preferences
+}
+
+fn default_theme() -> String {
+    "system".to_string()
+}
+
+fn default_font_preset() -> String {
+    "sans".to_string()
+}
+
+fn default_font_size() -> u16 {
+    16
+}
+
+fn default_line_height() -> f32 {
+    1.7
+}
+
+fn default_content_width() -> u16 {
+    780
+}
+
+fn default_outline_visible() -> bool {
+    true
+}
+
 fn resolve_document_path(input_path: &str, cwd: &Path) -> Result<PathBuf, MdvError> {
     let raw_path = PathBuf::from(input_path);
     let candidate = if raw_path.is_absolute() {
@@ -521,6 +636,32 @@ fn resolve_markdown_in_directory(
             .with_path(input_path)
             .with_cwd(cwd)
         })
+}
+
+fn open_document_from_input(
+    app: &AppHandle,
+    state: &SharedState,
+    input_path: &str,
+) -> Result<DocumentPayload, MdvError> {
+    let (cwd, watch) = {
+        let inner = state.inner.lock().expect("runtime state poisoned");
+        (inner.config.cwd.clone(), inner.config.watch)
+    };
+    let resolved = resolve_document_path(input_path, &cwd)?;
+    let watcher = if watch {
+        watcher::start(app.clone(), resolved.clone()).ok()
+    } else {
+        None
+    };
+    let document = read_document_at(&resolved, watcher.is_some())?;
+
+    let mut inner = state.inner.lock().expect("runtime state poisoned");
+    inner.config.input_path = input_path.to_string();
+    inner.document_path = Some(resolved);
+    inner.initial_error = None;
+    inner.watcher = watcher;
+
+    Ok(document)
 }
 
 fn read_document_at(path: &Path, watching: bool) -> Result<DocumentPayload, MdvError> {

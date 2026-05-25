@@ -1,4 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
+import { useEffect, useMemo, useRef } from "react";
+import type { CSSProperties } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkFrontmatter from "remark-frontmatter";
@@ -12,12 +14,20 @@ import type { Pluggable, PluggableList } from "unified";
 import { CodeBlock } from "./CodeBlock";
 import { ImageRenderer } from "./ImageRenderer";
 import { MermaidBlock } from "./MermaidBlock";
-import type { DocumentPayload, EffectiveTheme } from "../lib/types";
+import { getReaderStyleProperties } from "../plugins/readerSettings";
+import type {
+  DocumentPayload,
+  EffectiveTheme,
+  OutlineHeading,
+  ReaderPreferences,
+} from "../lib/types";
 
 interface MarkdownViewProps {
   document: DocumentPayload;
   allowHtml: boolean;
+  preferences: ReaderPreferences;
   theme: EffectiveTheme;
+  onHeadingsChange: (headings: OutlineHeading[]) => void;
 }
 
 function getLanguage(className: string | undefined): string | undefined {
@@ -29,7 +39,20 @@ function isExternalHref(href: string): boolean {
   return /^(https?:|mailto:)/i.test(href);
 }
 
-export function MarkdownView({ document, allowHtml, theme }: MarkdownViewProps) {
+function getHeadingText(element: Element): string {
+  const clone = element.cloneNode(true) as Element;
+  clone.querySelector(".heading-anchor")?.remove();
+  return clone.textContent?.trim() ?? "";
+}
+
+export function MarkdownView({
+  document,
+  allowHtml,
+  preferences,
+  theme,
+  onHeadingsChange,
+}: MarkdownViewProps) {
+  const articleRef = useRef<HTMLElement>(null);
   const autolinkHeadings: Pluggable = [
     rehypeAutolinkHeadings,
     {
@@ -47,10 +70,35 @@ export function MarkdownView({ document, allowHtml, theme }: MarkdownViewProps) 
   const rehypePlugins: PluggableList = allowHtml
     ? [rehypeRaw, rehypeSanitize, rehypeKatex, rehypeSlug, autolinkHeadings]
     : [rehypeKatex, rehypeSlug, autolinkHeadings];
+  const readerStyle = useMemo(
+    () => getReaderStyleProperties(preferences) as CSSProperties,
+    [
+      preferences.contentWidth,
+      preferences.fontPreset,
+      preferences.fontSize,
+      preferences.lineHeight,
+    ],
+  );
+
+  useEffect(() => {
+    const headings = Array.from(
+      articleRef.current?.querySelectorAll("h1, h2, h3, h4") ?? [],
+    )
+      .map((element) => ({
+        id: element.id,
+        level: Number(element.tagName.slice(1)),
+        text: getHeadingText(element),
+      }))
+      .filter((heading) => heading.id && heading.text);
+
+    onHeadingsChange(headings);
+
+    return () => onHeadingsChange([]);
+  }, [allowHtml, document.content, onHeadingsChange]);
 
   return (
     <main className="document-shell">
-      <article className="markdown-body mdv-markdown">
+      <article ref={articleRef} className="markdown-body mdv-markdown" style={readerStyle}>
         <ReactMarkdown
           remarkPlugins={[remarkGfm, remarkFrontmatter, remarkMath]}
           rehypePlugins={rehypePlugins}

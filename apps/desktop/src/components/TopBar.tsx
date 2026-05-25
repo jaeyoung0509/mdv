@@ -1,14 +1,25 @@
-import { Check, Copy, Monitor, Moon, Sun } from "lucide-react";
-import type { AppTheme, DocumentPayload } from "../lib/types";
+import { Check, Copy, FolderOpen, ListTree, Settings } from "lucide-react";
+import type { DocumentPayload } from "../lib/types";
 
 interface TopBarProps {
   document: DocumentPayload | null;
   watch: boolean;
-  theme: AppTheme;
-  onThemeChange: (theme: AppTheme) => void;
+  outlineVisible: boolean;
+  opening?: boolean;
+  onOpenFile: () => void;
+  onOutlineToggle: () => void;
+  onSettingsToggle: () => void;
 }
 
-export function TopBar({ document, watch, theme, onThemeChange }: TopBarProps) {
+export function TopBar({
+  document,
+  watch,
+  outlineVisible,
+  opening = false,
+  onOpenFile,
+  onOutlineToggle,
+  onSettingsToggle,
+}: TopBarProps) {
   const copyPath = async () => {
     if (!document) {
       return;
@@ -34,32 +45,26 @@ export function TopBar({ document, watch, theme, onThemeChange }: TopBarProps) {
           {watch && document?.watching ? "Watching" : "Static"}
         </span>
 
-        <div className="theme-switcher" aria-label="Theme">
-          <button
-            type="button"
-            title="Use system theme"
-            aria-pressed={theme === "system"}
-            onClick={() => onThemeChange("system")}
-          >
-            <Monitor size={15} aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            title="Use light theme"
-            aria-pressed={theme === "light"}
-            onClick={() => onThemeChange("light")}
-          >
-            <Sun size={15} aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            title="Use dark theme"
-            aria-pressed={theme === "dark"}
-            onClick={() => onThemeChange("dark")}
-          >
-            <Moon size={15} aria-hidden="true" />
-          </button>
-        </div>
+        <button
+          type="button"
+          className="icon-button"
+          title="Open Markdown file"
+          onClick={onOpenFile}
+          disabled={opening}
+        >
+          <FolderOpen size={15} aria-hidden="true" />
+        </button>
+
+        <button
+          type="button"
+          className="icon-button"
+          title="Toggle outline"
+          aria-pressed={outlineVisible}
+          onClick={onOutlineToggle}
+          disabled={!document}
+        >
+          <ListTree size={15} aria-hidden="true" />
+        </button>
 
         <button
           type="button"
@@ -69,6 +74,15 @@ export function TopBar({ document, watch, theme, onThemeChange }: TopBarProps) {
           disabled={!document}
         >
           <Copy size={15} aria-hidden="true" />
+        </button>
+
+        <button
+          type="button"
+          className="icon-button"
+          title="Open settings"
+          onClick={onSettingsToggle}
+        >
+          <Settings size={15} aria-hidden="true" />
         </button>
       </div>
     </header>

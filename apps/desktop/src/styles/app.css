@@ -8,11 +8,13 @@
   --app-border: #dce2ea;
   --app-border-strong: #c8d0dc;
   --app-accent: #2563eb;
+  --app-accent-contrast: #ffffff;
   --app-accent-soft: #e7efff;
   --app-error: #b42318;
   --app-error-bg: #fff1f0;
   --app-shadow: 0 10px 40px rgb(15 23 42 / 0.06);
   --top-bar-height: 52px;
+  --reader-panel-width: 252px;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
@@ -26,6 +28,7 @@
   --app-border: #2b3038;
   --app-border-strong: #3a414c;
   --app-accent: #7aa7ff;
+  --app-accent-contrast: #101113;
   --app-accent-soft: #18243d;
   --app-error: #ff9b92;
   --app-error-bg: #2a1718;
@@ -116,16 +119,9 @@ button {
 }
 
 .theme-switcher {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 2px;
-  border: 1px solid var(--app-border);
-  border-radius: 7px;
-  background: var(--app-surface-raised);
+  display: none;
 }
 
-.theme-switcher button,
 .icon-button,
 .code-block__bar button {
   display: inline-grid;
@@ -139,14 +135,13 @@ button {
   cursor: pointer;
 }
 
-.theme-switcher button:hover,
 .icon-button:hover,
 .code-block__bar button:hover {
   background: var(--app-accent-soft);
   color: var(--app-accent);
 }
 
-.theme-switcher button[aria-pressed="true"] {
+.icon-button[aria-pressed="true"] {
   background: var(--app-surface);
   color: var(--app-text);
   box-shadow: 0 1px 3px rgb(15 23 42 / 0.12);
@@ -157,8 +152,291 @@ button {
   opacity: 0.45;
 }
 
+.reader-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-height: calc(100vh - var(--top-bar-height));
+}
+
+.reader-layout--with-outline {
+  grid-template-columns: var(--reader-panel-width) minmax(0, 1fr);
+}
+
 .document-shell {
+  min-width: 0;
   padding: 48px 32px 72px;
+}
+
+.outline-panel {
+  position: sticky;
+  top: var(--top-bar-height);
+  align-self: start;
+  height: calc(100vh - var(--top-bar-height));
+  overflow: auto;
+  border-right: 1px solid var(--app-border);
+  background: color-mix(in srgb, var(--app-surface) 94%, transparent);
+  padding: 14px 12px 24px;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 36px;
+  margin-bottom: 10px;
+}
+
+.panel-header h2 {
+  margin: 0;
+  color: var(--app-text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.outline-panel__close {
+  display: none;
+}
+
+.outline-nav {
+  display: grid;
+  gap: 1px;
+}
+
+.outline-nav__item {
+  width: 100%;
+  min-height: 30px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--app-muted);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1.35;
+  padding: 6px 8px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.outline-nav__item:hover {
+  background: var(--app-surface-raised);
+  color: var(--app-text);
+}
+
+.outline-nav__item[aria-current="true"] {
+  background: var(--app-accent-soft);
+  color: var(--app-accent);
+  font-weight: 650;
+}
+
+.outline-nav__item[data-level="2"] {
+  padding-left: 18px;
+}
+
+.outline-nav__item[data-level="3"] {
+  padding-left: 30px;
+}
+
+.outline-nav__item[data-level="4"] {
+  padding-left: 42px;
+}
+
+.outline-empty {
+  margin: 14px 4px;
+  color: var(--app-muted);
+  font-size: 12px;
+}
+
+.settings-panel {
+  position: fixed;
+  top: var(--top-bar-height);
+  right: 0;
+  bottom: 0;
+  z-index: 80;
+  width: min(360px, calc(100vw - 28px));
+  overflow: auto;
+  border-left: 1px solid var(--app-border);
+  background: var(--app-surface);
+  box-shadow: -20px 0 50px rgb(15 23 42 / 0.14);
+  padding: 16px 18px 22px;
+}
+
+.settings-plugin + .settings-plugin {
+  border-top: 1px solid var(--app-border);
+  margin-top: 18px;
+  padding-top: 2px;
+}
+
+.settings-section {
+  margin: 18px 0;
+}
+
+.settings-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  color: var(--app-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.segmented-control {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2px;
+  border: 1px solid var(--app-border);
+  border-radius: 7px;
+  background: var(--app-surface-raised);
+  padding: 2px;
+}
+
+.segmented-control button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 32px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--app-muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.segmented-control button:hover {
+  background: var(--app-accent-soft);
+  color: var(--app-accent);
+}
+
+.segmented-control button[aria-pressed="true"] {
+  background: var(--app-surface);
+  color: var(--app-text);
+  box-shadow: 0 1px 3px rgb(15 23 42 / 0.12);
+}
+
+.range-control {
+  display: grid;
+  gap: 8px;
+  margin: 18px 0;
+}
+
+.range-control > span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.range-control .settings-label {
+  margin-bottom: 0;
+}
+
+.range-control output {
+  color: var(--app-text);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+}
+
+.range-control input {
+  width: 100%;
+  accent-color: var(--app-accent);
+}
+
+.toggle-control {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 34px;
+  gap: 12px;
+  border: 1px solid var(--app-border);
+  border-radius: 7px;
+  background: var(--app-surface-raised);
+  color: var(--app-text);
+  padding: 0 10px;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.toggle-control input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--app-accent);
+}
+
+.reset-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 34px;
+  margin-top: 8px;
+  border: 1px solid var(--app-border);
+  border-radius: 7px;
+  background: var(--app-surface-raised);
+  color: var(--app-text);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.reset-button:hover {
+  border-color: var(--app-border-strong);
+  background: var(--app-accent-soft);
+  color: var(--app-accent);
+}
+
+.panel-backdrop {
+  position: fixed;
+  top: var(--top-bar-height);
+  right: 0;
+  bottom: 0;
+  left: 0;
+  border: 0;
+  background: rgb(15 23 42 / 0.22);
+  cursor: default;
+}
+
+.panel-backdrop--settings {
+  z-index: 70;
+}
+
+.panel-backdrop--outline {
+  display: none;
+  z-index: 60;
+}
+
+.drop-overlay {
+  position: fixed;
+  inset: var(--top-bar-height) 0 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--app-accent-soft) 78%, transparent);
+  border: 2px solid var(--app-accent);
+  pointer-events: none;
+}
+
+.drop-overlay__panel {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--app-border-strong);
+  border-radius: 8px;
+  background: var(--app-surface);
+  color: var(--app-text);
+  box-shadow: var(--app-shadow);
+  padding: 14px 18px;
+  font-size: 14px;
+  font-weight: 700;
 }
 
 .state-view {
@@ -203,6 +481,45 @@ button {
   color: var(--app-muted);
 }
 
+.state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 18px 0 12px;
+}
+
+.primary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 36px;
+  border: 1px solid color-mix(in srgb, var(--app-accent) 64%, var(--app-border));
+  border-radius: 7px;
+  background: var(--app-accent);
+  color: var(--app-accent-contrast);
+  cursor: pointer;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.primary-button:hover {
+  filter: brightness(0.96);
+}
+
+.primary-button:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.state-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+}
+
 .state-meta {
   overflow-wrap: anywhere;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
@@ -236,6 +553,31 @@ button {
 
   .document-shell {
     padding: 24px 18px 48px;
+  }
+
+  .reader-layout,
+  .reader-layout--with-outline {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .outline-panel {
+    position: fixed;
+    top: var(--top-bar-height);
+    bottom: 0;
+    left: 0;
+    z-index: 70;
+    width: min(300px, calc(100vw - 42px));
+    height: auto;
+    border-right: 1px solid var(--app-border);
+    box-shadow: 20px 0 44px rgb(15 23 42 / 0.16);
+  }
+
+  .outline-panel__close {
+    display: inline-grid;
+  }
+
+  .panel-backdrop--outline {
+    display: block;
   }
 
   .watch-status {
