@@ -81,6 +81,8 @@ Options:
 - `--version`
 - `--help`
 
+`mdv` remembers the last theme selected in the app. Passing `--theme` overrides the saved preference for that launch.
+
 If `path` is omitted, `mdv` opens the current directory and resolves a Markdown file in this order:
 
 1. `README.md`

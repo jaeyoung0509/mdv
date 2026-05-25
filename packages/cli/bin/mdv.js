@@ -15,7 +15,7 @@ Usage:
   mdv [path] [options]
 
 Options:
-  --theme <light|dark|system>  Choose viewer theme (default: system)
+  --theme <light|dark|system>  Choose viewer theme (default: saved preference, then system)
   --no-watch                   Disable file watching
   --allow-html                 Parse sanitized raw HTML from local trusted docs
   --version                    Print version
@@ -32,7 +32,7 @@ Examples:
 function parseArgs(argv) {
   const options = {
     path: ".",
-    theme: "system",
+    theme: null,
     watch: true,
     allowHtml: false,
     help: false,
@@ -171,7 +171,11 @@ function launch(options) {
   const root = workspaceRoot();
   const desktopDir = resolve(root, "apps/desktop");
   const resolvedPath = resolve(process.cwd(), options.path);
-  const appArgs = [resolvedPath, "--theme", options.theme];
+  const appArgs = [resolvedPath];
+
+  if (options.theme) {
+    appArgs.push("--theme", options.theme);
+  }
 
   if (!options.watch) {
     appArgs.push("--no-watch");
