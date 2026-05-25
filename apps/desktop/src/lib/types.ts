@@ -11,6 +11,15 @@ export interface ReaderPreferences {
   lineHeight: number;
   contentWidth: number;
   outlineVisible: boolean;
+  bookmarks: Record<string, ReaderBookmark[]>;
+}
+
+export interface ReaderBookmark {
+  id: string;
+  label: string;
+  scrollY: number;
+  headingId?: string;
+  createdAt: number;
 }
 
 export interface OutlineHeading {

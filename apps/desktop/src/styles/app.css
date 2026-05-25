@@ -13,6 +13,12 @@
   --app-error: #b42318;
   --app-error-bg: #fff1f0;
   --app-shadow: 0 10px 40px rgb(15 23 42 / 0.06);
+  --app-shadow-strong: 0 18px 70px rgb(15 23 42 / 0.16);
+  --motion-fast: 150ms;
+  --motion-medium: 240ms;
+  --motion-slow: 360ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
   --top-bar-height: 52px;
   --reader-panel-width: 252px;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -33,10 +39,15 @@
   --app-error: #ff9b92;
   --app-error-bg: #2a1718;
   --app-shadow: 0 10px 40px rgb(0 0 0 / 0.25);
+  --app-shadow-strong: 0 20px 80px rgb(0 0 0 / 0.38);
 }
 
 * {
   box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
@@ -49,6 +60,9 @@ body {
   line-height: 1.65;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
+  transition:
+    background-color var(--motion-medium) var(--ease-standard),
+    color var(--motion-medium) var(--ease-standard);
 }
 
 button {
@@ -58,6 +72,7 @@ button {
 .app-frame {
   min-height: 100vh;
   background: var(--app-bg);
+  transition: background-color var(--motion-medium) var(--ease-standard);
 }
 
 .top-bar {
@@ -73,6 +88,10 @@ button {
   border-bottom: 1px solid var(--app-border);
   background: color-mix(in srgb, var(--app-surface) 92%, transparent);
   backdrop-filter: blur(18px);
+  transition:
+    background-color var(--motion-medium) var(--ease-standard),
+    border-color var(--motion-medium) var(--ease-standard),
+    box-shadow var(--motion-medium) var(--ease-standard);
 }
 
 .top-bar__title {
@@ -133,12 +152,19 @@ button {
   background: transparent;
   color: var(--app-muted);
   cursor: pointer;
+  transition:
+    background-color var(--motion-fast) var(--ease-standard),
+    box-shadow var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard),
+    opacity var(--motion-fast) var(--ease-standard),
+    transform var(--motion-fast) var(--ease-emphasized);
 }
 
 .icon-button:hover,
 .code-block__bar button:hover {
   background: var(--app-accent-soft);
   color: var(--app-accent);
+  transform: translateY(-1px);
 }
 
 .icon-button[aria-pressed="true"] {
@@ -150,12 +176,14 @@ button {
 .icon-button:disabled {
   cursor: not-allowed;
   opacity: 0.45;
+  transform: none;
 }
 
 .reader-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   min-height: calc(100vh - var(--top-bar-height));
+  transition: grid-template-columns var(--motion-slow) var(--ease-emphasized);
 }
 
 .reader-layout--with-outline {
@@ -165,6 +193,7 @@ button {
 .document-shell {
   min-width: 0;
   padding: 48px 32px 72px;
+  animation: document-enter var(--motion-slow) var(--ease-emphasized) both;
 }
 
 .outline-panel {
@@ -176,6 +205,11 @@ button {
   border-right: 1px solid var(--app-border);
   background: color-mix(in srgb, var(--app-surface) 94%, transparent);
   padding: 14px 12px 24px;
+  animation: panel-slide-in-left var(--motion-medium) var(--ease-emphasized) both;
+  transition:
+    background-color var(--motion-medium) var(--ease-standard),
+    border-color var(--motion-medium) var(--ease-standard),
+    box-shadow var(--motion-medium) var(--ease-standard);
 }
 
 .panel-header {
@@ -218,11 +252,17 @@ button {
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
+  transition:
+    background-color var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard),
+    padding-left var(--motion-fast) var(--ease-emphasized),
+    transform var(--motion-fast) var(--ease-emphasized);
 }
 
 .outline-nav__item:hover {
   background: var(--app-surface-raised);
   color: var(--app-text);
+  transform: translateX(2px);
 }
 
 .outline-nav__item[aria-current="true"] {
@@ -249,6 +289,98 @@ button {
   font-size: 12px;
 }
 
+.bookmark-section {
+  margin-top: 18px;
+  border-top: 1px solid var(--app-border);
+  padding-top: 14px;
+}
+
+.bookmark-section__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 4px 8px;
+}
+
+.bookmark-section__header h3 {
+  margin: 0;
+  color: var(--app-text);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.bookmark-section__header span {
+  display: inline-grid;
+  min-width: 20px;
+  height: 20px;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--app-surface-raised);
+  color: var(--app-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.bookmark-list {
+  display: grid;
+  gap: 3px;
+}
+
+.bookmark-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px;
+  align-items: center;
+  border-radius: 7px;
+  transition: background-color var(--motion-fast) var(--ease-standard);
+}
+
+.bookmark-row:hover {
+  background: var(--app-surface-raised);
+}
+
+.bookmark-row__jump {
+  display: inline-flex;
+  min-width: 0;
+  min-height: 31px;
+  align-items: center;
+  gap: 7px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--app-muted);
+  cursor: pointer;
+  padding: 6px 4px 6px 8px;
+  text-align: left;
+  transition:
+    color var(--motion-fast) var(--ease-standard),
+    transform var(--motion-fast) var(--ease-emphasized);
+}
+
+.bookmark-row__jump:hover {
+  color: var(--app-text);
+  transform: translateX(2px);
+}
+
+.bookmark-row__jump span {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bookmark-row__remove {
+  opacity: 0;
+}
+
+.bookmark-row:hover .bookmark-row__remove,
+.bookmark-row:focus-within .bookmark-row__remove {
+  opacity: 1;
+}
+
 .settings-panel {
   position: fixed;
   top: var(--top-bar-height);
@@ -261,6 +393,11 @@ button {
   background: var(--app-surface);
   box-shadow: -20px 0 50px rgb(15 23 42 / 0.14);
   padding: 16px 18px 22px;
+  animation: panel-slide-in-right var(--motion-medium) var(--ease-emphasized) both;
+  transition:
+    background-color var(--motion-medium) var(--ease-standard),
+    border-color var(--motion-medium) var(--ease-standard),
+    box-shadow var(--motion-medium) var(--ease-standard);
 }
 
 .settings-plugin + .settings-plugin {
@@ -307,11 +444,17 @@ button {
   cursor: pointer;
   font-size: 12px;
   font-weight: 650;
+  transition:
+    background-color var(--motion-fast) var(--ease-standard),
+    box-shadow var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard),
+    transform var(--motion-fast) var(--ease-emphasized);
 }
 
 .segmented-control button:hover {
   background: var(--app-accent-soft);
   color: var(--app-accent);
+  transform: translateY(-1px);
 }
 
 .segmented-control button[aria-pressed="true"] {
@@ -362,6 +505,10 @@ button {
   padding: 0 10px;
   font-size: 13px;
   font-weight: 650;
+  transition:
+    background-color var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard);
 }
 
 .toggle-control input {
@@ -386,12 +533,18 @@ button {
   cursor: pointer;
   font-size: 13px;
   font-weight: 650;
+  transition:
+    background-color var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard),
+    transform var(--motion-fast) var(--ease-emphasized);
 }
 
 .reset-button:hover {
   border-color: var(--app-border-strong);
   background: var(--app-accent-soft);
   color: var(--app-accent);
+  transform: translateY(-1px);
 }
 
 .panel-backdrop {
@@ -403,6 +556,7 @@ button {
   border: 0;
   background: rgb(15 23 42 / 0.22);
   cursor: default;
+  animation: fade-in var(--motion-fast) var(--ease-standard) both;
 }
 
 .panel-backdrop--settings {
@@ -423,6 +577,7 @@ button {
   background: color-mix(in srgb, var(--app-accent-soft) 78%, transparent);
   border: 2px solid var(--app-accent);
   pointer-events: none;
+  animation: fade-in var(--motion-fast) var(--ease-standard) both;
 }
 
 .drop-overlay__panel {
@@ -437,6 +592,7 @@ button {
   padding: 14px 18px;
   font-size: 14px;
   font-weight: 700;
+  animation: scale-in var(--motion-medium) var(--ease-emphasized) both;
 }
 
 .state-view {
@@ -453,6 +609,7 @@ button {
   background: var(--app-surface);
   box-shadow: var(--app-shadow);
   padding: 28px;
+  animation: state-rise-in var(--motion-slow) var(--ease-emphasized) both;
 }
 
 .state-panel--error {
@@ -502,15 +659,21 @@ button {
   padding: 0 14px;
   font-size: 13px;
   font-weight: 700;
+  transition:
+    filter var(--motion-fast) var(--ease-standard),
+    opacity var(--motion-fast) var(--ease-standard),
+    transform var(--motion-fast) var(--ease-emphasized);
 }
 
 .primary-button:hover {
   filter: brightness(0.96);
+  transform: translateY(-1px);
 }
 
 .primary-button:disabled {
   cursor: wait;
   opacity: 0.7;
+  transform: none;
 }
 
 .state-hint {
@@ -518,6 +681,47 @@ button {
   align-items: center;
   gap: 7px;
   font-size: 13px;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+@keyframes state-rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+}
+
+@keyframes document-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes panel-slide-in-left {
+  from {
+    opacity: 0;
+    transform: translateX(-18px);
+  }
+}
+
+@keyframes panel-slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
 }
 
 .state-meta {
@@ -570,6 +774,7 @@ button {
     height: auto;
     border-right: 1px solid var(--app-border);
     box-shadow: 20px 0 44px rgb(15 23 42 / 0.16);
+    animation: panel-slide-in-left var(--motion-medium) var(--ease-emphasized) both;
   }
 
   .outline-panel__close {
@@ -584,5 +789,15 @@ button {
     max-width: 82px;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    scroll-behavior: auto !important;
+    transition-duration: 1ms !important;
   }
 }

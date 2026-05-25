@@ -1,4 +1,4 @@
-import { Check, Copy, FolderOpen, ListTree, Settings } from "lucide-react";
+import { BookmarkPlus, Check, Copy, FolderOpen, ListTree, Settings } from "lucide-react";
 import type { DocumentPayload } from "../lib/types";
 
 interface TopBarProps {
@@ -6,6 +6,7 @@ interface TopBarProps {
   watch: boolean;
   outlineVisible: boolean;
   opening?: boolean;
+  onBookmarkAdd: () => void;
   onOpenFile: () => void;
   onOutlineToggle: () => void;
   onSettingsToggle: () => void;
@@ -16,6 +17,7 @@ export function TopBar({
   watch,
   outlineVisible,
   opening = false,
+  onBookmarkAdd,
   onOpenFile,
   onOutlineToggle,
   onSettingsToggle,
@@ -74,6 +76,16 @@ export function TopBar({
           disabled={!document}
         >
           <Copy size={15} aria-hidden="true" />
+        </button>
+
+        <button
+          type="button"
+          className="icon-button"
+          title="Add bookmark"
+          onClick={onBookmarkAdd}
+          disabled={!document}
+        >
+          <BookmarkPlus size={15} aria-hidden="true" />
         </button>
 
         <button

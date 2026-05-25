@@ -19,12 +19,34 @@ import type {
   EffectiveTheme,
   InitialState,
   MdvError,
+  ReaderBookmark,
   OutlineHeading,
   ReaderPreferences,
 } from "./lib/types";
 
 function isTauriRuntime(): boolean {
   return "__TAURI_INTERNALS__" in window;
+}
+
+function getCurrentHeading(headings: OutlineHeading[]): OutlineHeading | null {
+  let currentHeading = headings[0] ?? null;
+
+  for (const heading of headings) {
+    const element = window.document.getElementById(heading.id);
+
+    if (!element) {
+      continue;
+    }
+
+    if (element.getBoundingClientRect().top <= 140) {
+      currentHeading = heading;
+      continue;
+    }
+
+    break;
+  }
+
+  return currentHeading;
 }
 
 export default function App() {
@@ -66,6 +88,14 @@ export default function App() {
 
   const openDocumentPath = useCallback(
     async (path: string) => {
+      if (!isTauriRuntime()) {
+        setError({
+          kind: "PreviewMode",
+          message: "File opening is available in the desktop app.",
+        });
+        return;
+      }
+
       setOpening(true);
 
       try {
@@ -82,6 +112,14 @@ export default function App() {
   );
 
   const openFilePicker = useCallback(async () => {
+    if (!isTauriRuntime()) {
+      setError({
+        kind: "PreviewMode",
+        message: "File opening is available in the desktop app.",
+      });
+      return;
+    }
+
     setOpening(true);
 
     try {
@@ -99,6 +137,10 @@ export default function App() {
   }, [showDocument, toMdvError]);
 
   const persistPreferences = useCallback((nextPreferences: ReaderPreferences) => {
+    if (!isTauriRuntime()) {
+      return;
+    }
+
     invoke<ReaderPreferences>("save_reader_preferences", { preferences: nextPreferences }).catch(
       () => {
         // Reader settings still apply for this session if persistence fails.
@@ -106,10 +148,10 @@ export default function App() {
     );
   }, []);
 
-  const changePreferences = useCallback(
-    (patch: Partial<ReaderPreferences>) => {
+  const updatePreferences = useCallback(
+    (updater: (current: ReaderPreferences) => ReaderPreferences) => {
       setPreferences((current) => {
-        const nextPreferences = normalizeReaderPreferences({ ...current, ...patch });
+        const nextPreferences = normalizeReaderPreferences(updater(current));
         persistPreferences(nextPreferences);
         return nextPreferences;
       });
@@ -117,10 +159,19 @@ export default function App() {
     [persistPreferences],
   );
 
+  const changePreferences = useCallback(
+    (patch: Partial<ReaderPreferences>) => {
+      updatePreferences((current) => ({ ...current, ...patch }));
+    },
+    [updatePreferences],
+  );
+
   const resetPreferences = useCallback(() => {
-    setPreferences(DEFAULT_READER_PREFERENCES);
-    persistPreferences(DEFAULT_READER_PREFERENCES);
-  }, [persistPreferences]);
+    updatePreferences((current) => ({
+      ...DEFAULT_READER_PREFERENCES,
+      bookmarks: current.bookmarks,
+    }));
+  }, [updatePreferences]);
 
   const toggleOutline = useCallback(() => {
     setPreferences((current) => {
@@ -137,7 +188,90 @@ export default function App() {
     setHeadings(nextHeadings);
   }, []);
 
+  const addBookmark = useCallback(() => {
+    if (!document) {
+      return;
+    }
+
+    const heading = getCurrentHeading(headings);
+    const scrollY = Math.max(0, Math.round(window.scrollY));
+    const createdAt = Date.now();
+    const nextBookmark: ReaderBookmark = {
+      id: `${createdAt}-${Math.random().toString(36).slice(2, 8)}`,
+      label: heading?.text || `${document.fileName} at ${scrollY}px`,
+      scrollY,
+      headingId: heading?.id,
+      createdAt,
+    };
+
+    updatePreferences((current) => {
+      const currentBookmarks = current.bookmarks[document.path] ?? [];
+      const dedupedBookmarks = currentBookmarks.filter((bookmark) => {
+        if (heading?.id) {
+          return bookmark.headingId !== heading.id;
+        }
+
+        return Math.abs(bookmark.scrollY - scrollY) > 32;
+      });
+
+      return {
+        ...current,
+        outlineVisible: true,
+        bookmarks: {
+          ...current.bookmarks,
+          [document.path]: [nextBookmark, ...dedupedBookmarks].slice(0, 40),
+        },
+      };
+    });
+  }, [document, headings, updatePreferences]);
+
+  const removeBookmark = useCallback(
+    (bookmarkId: string) => {
+      if (!document) {
+        return;
+      }
+
+      updatePreferences((current) => {
+        const nextBookmarks = (current.bookmarks[document.path] ?? []).filter(
+          (bookmark) => bookmark.id !== bookmarkId,
+        );
+        const bookmarks = { ...current.bookmarks };
+
+        if (nextBookmarks.length > 0) {
+          bookmarks[document.path] = nextBookmarks;
+        } else {
+          delete bookmarks[document.path];
+        }
+
+        return {
+          ...current,
+          bookmarks,
+        };
+      });
+    },
+    [document, updatePreferences],
+  );
+
+  const selectBookmark = useCallback((bookmark: ReaderBookmark) => {
+    if (bookmark.headingId) {
+      const heading = window.document.getElementById(bookmark.headingId);
+
+      if (heading) {
+        heading.scrollIntoView({ behavior: "smooth", block: "start" });
+        window.history.replaceState(null, "", `#${bookmark.headingId}`);
+        return;
+      }
+    }
+
+    window.scrollTo({ top: bookmark.scrollY, behavior: "smooth" });
+  }, []);
+
   useEffect(() => {
+    if (!isTauriRuntime()) {
+      setLoading(false);
+      return;
+    }
+
     invoke<InitialState>("get_initial_state")
       .then((state) => {
         setPreferences(normalizeReaderPreferences(state.preferences));
@@ -169,6 +303,10 @@ export default function App() {
   }, [preferences.theme]);
 
   useEffect(() => {
+    if (!isTauriRuntime()) {
+      return;
+    }
+
     let unlisten: (() => void) | undefined;
 
     listen("mdv:file-updated", async () => {
@@ -250,6 +388,7 @@ export default function App() {
           watch={watch}
           outlineVisible={preferences.outlineVisible}
           opening={opening}
+          onBookmarkAdd={addBookmark}
           onOpenFile={openFilePicker}
           onOutlineToggle={toggleOutline}
           onSettingsToggle={() => setSettingsOpen(true)}
@@ -265,6 +404,7 @@ export default function App() {
   }
 
   const noMarkdown = error?.kind === "NoMarkdownFiles";
+  const documentBookmarks = document ? (preferences.bookmarks[document.path] ?? []) : [];
 
   return (
     <div className="app-frame">
@@ -273,6 +413,7 @@ export default function App() {
         watch={watch}
         outlineVisible={preferences.outlineVisible}
         opening={opening}
+        onBookmarkAdd={addBookmark}
         onOpenFile={openFilePicker}
         onOutlineToggle={toggleOutline}
         onSettingsToggle={() => setSettingsOpen(true)}
@@ -284,9 +425,12 @@ export default function App() {
           }`}
         >
           <OutlinePanel
+            bookmarks={documentBookmarks}
             headings={headings}
             open={preferences.outlineVisible}
             onClose={() => changePreferences({ outlineVisible: false })}
+            onBookmarkRemove={removeBookmark}
+            onBookmarkSelect={selectBookmark}
           />
           <MarkdownView
             document={document}

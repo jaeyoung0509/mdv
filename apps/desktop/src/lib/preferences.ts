@@ -1,4 +1,4 @@
-import type { FontPreset, ReaderPreferences } from "./types";
+import type { FontPreset, ReaderBookmark, ReaderPreferences } from "./types";
 
 export const DEFAULT_READER_PREFERENCES: ReaderPreferences = {
   theme: "system",
@@ -7,6 +7,7 @@ export const DEFAULT_READER_PREFERENCES: ReaderPreferences = {
   lineHeight: 1.7,
   contentWidth: 780,
   outlineVisible: true,
+  bookmarks: {},
 };
 
 export const FONT_PRESET_LABELS: Record<FontPreset, string> = {
@@ -23,6 +24,35 @@ export const FONT_PRESET_STACKS: Record<FontPreset, string> = {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
+}
+
+function normalizeBookmarks(
+  bookmarks: Partial<ReaderPreferences>["bookmarks"],
+): Record<string, ReaderBookmark[]> {
+  if (!bookmarks || typeof bookmarks !== "object") {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(bookmarks)
+      .map(([documentPath, documentBookmarks]) => {
+        const normalizedBookmarks = Array.isArray(documentBookmarks)
+          ? documentBookmarks
+              .map((bookmark) => ({
+                id: String(bookmark.id || ""),
+                label: String(bookmark.label || "Bookmark"),
+                scrollY: clamp(Number(bookmark.scrollY) || 0, 0, 4_294_967_295),
+                headingId: bookmark.headingId ? String(bookmark.headingId) : undefined,
+                createdAt: Number(bookmark.createdAt) || Date.now(),
+              }))
+              .filter((bookmark) => bookmark.id)
+              .slice(0, 40)
+          : [];
+
+        return [documentPath, normalizedBookmarks] as const;
+      })
+      .filter(([documentPath, documentBookmarks]) => documentPath && documentBookmarks.length > 0),
+  );
 }
 
 export function normalizeReaderPreferences(
@@ -55,5 +85,6 @@ export function normalizeReaderPreferences(
       typeof preferences.outlineVisible === "boolean"
         ? preferences.outlineVisible
         : DEFAULT_READER_PREFERENCES.outlineVisible,
+    bookmarks: normalizeBookmarks(preferences.bookmarks),
   };
 }

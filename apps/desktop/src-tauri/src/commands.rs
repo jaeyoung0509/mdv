@@ -3,6 +3,7 @@ use base64::{engine::general_purpose::STANDARD, Engine};
 use notify::RecommendedWatcher;
 use serde::{Deserialize, Serialize};
 use std::{
+    collections::HashMap,
     fs, io,
     path::{Path, PathBuf},
     sync::Mutex,
@@ -85,6 +86,21 @@ pub struct FileMetadata {
     modified_millis: Option<u128>,
 }
 
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReaderBookmark {
+    #[serde(default)]
+    id: String,
+    #[serde(default)]
+    label: String,
+    #[serde(default)]
+    scroll_y: u32,
+    #[serde(default)]
+    heading_id: Option<String>,
+    #[serde(default)]
+    created_at: u64,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReaderPreferences {
@@ -100,6 +116,8 @@ pub struct ReaderPreferences {
     content_width: u16,
     #[serde(default = "default_outline_visible")]
     outline_visible: bool,
+    #[serde(default)]
+    bookmarks: HashMap<String, Vec<ReaderBookmark>>,
 }
 
 impl Default for ReaderPreferences {
@@ -111,6 +129,7 @@ impl Default for ReaderPreferences {
             line_height: default_line_height(),
             content_width: default_content_width(),
             outline_visible: default_outline_visible(),
+            bookmarks: HashMap::new(),
         }
     }
 }
@@ -535,6 +554,11 @@ fn normalize_reader_preferences(mut preferences: ReaderPreferences) -> ReaderPre
         default_line_height()
     };
     preferences.content_width = preferences.content_width.clamp(680, 960);
+    preferences.bookmarks.retain(|path, bookmarks| {
+        bookmarks.retain(|bookmark| !bookmark.id.is_empty() && !bookmark.label.is_empty());
+        bookmarks.truncate(40);
+        !path.is_empty() && !bookmarks.is_empty()
+    });
     preferences
 }
 

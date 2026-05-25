@@ -13,6 +13,11 @@
   );
   font-size: var(--reader-font-size, 16px);
   line-height: var(--reader-line-height, 1.7);
+  transition:
+    color var(--motion-medium) var(--ease-standard),
+    font-size var(--motion-medium) var(--ease-emphasized),
+    line-height var(--motion-medium) var(--ease-emphasized),
+    max-width var(--motion-slow) var(--ease-emphasized);
 }
 
 .mdv-markdown.markdown-body {
@@ -76,6 +81,9 @@
   font-size: 0.78em;
   opacity: 0;
   text-decoration: none;
+  transition:
+    color var(--motion-fast) var(--ease-standard),
+    opacity var(--motion-fast) var(--ease-standard);
 }
 
 .mdv-markdown :is(h1, h2, h3, h4, h5, h6):hover .heading-anchor {
@@ -89,6 +97,9 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 0.88em;
   padding: 0.16em 0.34em;
+  transition:
+    background-color var(--motion-medium) var(--ease-standard),
+    color var(--motion-medium) var(--ease-standard);
 }
 
 .mdv-markdown pre {
@@ -101,6 +112,10 @@
   border: 1px solid var(--app-border);
   border-radius: 8px;
   background: var(--app-surface);
+  transition:
+    background-color var(--motion-medium) var(--ease-standard),
+    border-color var(--motion-medium) var(--ease-standard),
+    box-shadow var(--motion-fast) var(--ease-standard);
 }
 
 .code-block__bar {
@@ -114,6 +129,10 @@
   color: var(--app-muted);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
+  transition:
+    background-color var(--motion-medium) var(--ease-standard),
+    border-color var(--motion-medium) var(--ease-standard),
+    color var(--motion-medium) var(--ease-standard);
 }
 
 .code-block__content {
@@ -160,6 +179,7 @@
 .mermaid-block {
   overflow: auto;
   text-align: center;
+  animation: document-enter var(--motion-medium) var(--ease-emphasized) both;
 }
 
 .mermaid-block svg {

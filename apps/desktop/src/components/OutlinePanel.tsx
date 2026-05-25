@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
-import { X } from "lucide-react";
-import type { OutlineHeading } from "../lib/types";
+import { Bookmark, Trash2, X } from "lucide-react";
+import type { OutlineHeading, ReaderBookmark } from "../lib/types";
 
 interface OutlinePanelProps {
+  bookmarks: ReaderBookmark[];
   headings: OutlineHeading[];
   open: boolean;
+  onBookmarkRemove: (bookmarkId: string) => void;
+  onBookmarkSelect: (bookmark: ReaderBookmark) => void;
   onClose: () => void;
 }
 
@@ -19,7 +22,14 @@ function scrollToHeading(id: string): void {
   window.history.replaceState(null, "", `#${id}`);
 }
 
-export function OutlinePanel({ headings, open, onClose }: OutlinePanelProps) {
+export function OutlinePanel({
+  bookmarks,
+  headings,
+  open,
+  onBookmarkRemove,
+  onBookmarkSelect,
+  onClose,
+}: OutlinePanelProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -117,6 +127,41 @@ export function OutlinePanel({ headings, open, onClose }: OutlinePanelProps) {
       ) : (
         <p className="outline-empty">No headings</p>
       )}
+
+      <section className="bookmark-section" aria-label="Bookmarks">
+        <div className="bookmark-section__header">
+          <h3>Bookmarks</h3>
+          <span>{bookmarks.length}</span>
+        </div>
+
+        {bookmarks.length > 0 ? (
+          <div className="bookmark-list">
+            {bookmarks.map((bookmark) => (
+              <div key={bookmark.id} className="bookmark-row">
+                <button
+                  type="button"
+                  className="bookmark-row__jump"
+                  title={bookmark.label}
+                  onClick={() => onBookmarkSelect(bookmark)}
+                >
+                  <Bookmark size={13} aria-hidden="true" />
+                  <span>{bookmark.label}</span>
+                </button>
+                <button
+                  type="button"
+                  className="icon-button bookmark-row__remove"
+                  title="Remove bookmark"
+                  onClick={() => onBookmarkRemove(bookmark.id)}
+                >
+                  <Trash2 size={13} aria-hidden="true" />
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="outline-empty">No bookmarks</p>
+        )}
+      </section>
     </aside>
   );
 }
