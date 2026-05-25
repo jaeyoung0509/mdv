@@ -4,7 +4,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 
-const VERSION = "0.1.0";
+const VERSION = "0.1.1";
 
 function printHelp() {
   console.log(`mdv ${VERSION}

@@ -1,6 +1,6 @@
 {
   "name": "@ejaebbang/mdv-workspace",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "packageManager": "pnpm@10.33.0",
   "scripts": {
@@ -8,7 +8,10 @@
     "build": "pnpm --filter @ejaebbang/mdv-desktop build && pnpm --filter @ejaebbang/mdv-desktop tauri build",
     "typecheck": "pnpm --filter @ejaebbang/mdv-desktop typecheck",
     "cli": "pnpm --filter @ejaebbang/mdv",
-    "link:cli": "cd packages/cli && npm link"
+    "link:cli": "cd packages/cli && npm link",
+    "version:patch": "node scripts/bump-version.mjs patch",
+    "version:minor": "node scripts/bump-version.mjs minor",
+    "version:major": "node scripts/bump-version.mjs major"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.0.0",

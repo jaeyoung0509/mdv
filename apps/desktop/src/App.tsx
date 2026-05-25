@@ -17,6 +17,13 @@ export default function App() {
   const [allowHtml, setAllowHtml] = useState(false);
   const [loading, setLoading] = useState(true);
 
+  const changeTheme = (nextTheme: AppTheme) => {
+    setTheme(nextTheme);
+    invoke("save_theme_preference", { theme: nextTheme }).catch(() => {
+      // The selected theme still applies for this session if persistence fails.
+    });
+  };
+
   useEffect(() => {
     invoke<InitialState>("get_initial_state")
       .then((state) => {
@@ -78,7 +85,7 @@ export default function App() {
   if (loading) {
     return (
       <div className="app-frame">
-        <TopBar document={null} watch={watch} theme={theme} onThemeChange={setTheme} />
+        <TopBar document={null} watch={watch} theme={theme} onThemeChange={changeTheme} />
         <main className="state-view">
           <section className="state-panel">
             <p className="state-eyebrow">Loading</p>
@@ -93,7 +100,7 @@ export default function App() {
 
   return (
     <div className="app-frame">
-      <TopBar document={document} watch={watch} theme={theme} onThemeChange={setTheme} />
+      <TopBar document={document} watch={watch} theme={theme} onThemeChange={changeTheme} />
       {document && !error ? (
         <MarkdownView document={document} allowHtml={allowHtml} theme={effectiveTheme} />
       ) : noMarkdown ? (

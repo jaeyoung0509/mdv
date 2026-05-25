@@ -39,6 +39,34 @@ mdv examples/lecture.md
 
 The CLI forwards the selected path and options into the Tauri desktop app.
 
+To update an existing local checkout to the newest pushed version:
+
+```sh
+git pull
+pnpm install
+pnpm build
+pnpm link:cli
+mdv --version
+```
+
+Until the npm package is published, this is the expected local installation path. After publication, installs can move to `npm install -g @ejaebbang/mdv`.
+
+## Versioning
+
+`mdv` uses SemVer with Conventional Commits:
+
+- `fix:` means a patch release.
+- `feat:` means a minor release.
+- breaking changes mean a major release.
+
+Use the workspace scripts to keep package, Tauri, Cargo, and CLI versions in sync:
+
+```sh
+pnpm version:patch
+pnpm version:minor
+pnpm version:major
+```
+
 ## CLI
 
 ```sh

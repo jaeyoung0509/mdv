@@ -1,6 +1,6 @@
 {
   "name": "@ejaebbang/mdv",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Fast, beautiful Markdown viewer from the terminal",
   "type": "module",
   "bin": {

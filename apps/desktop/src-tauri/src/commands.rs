@@ -1,7 +1,7 @@
 use crate::watcher;
 use base64::{engine::general_purpose::STANDARD, Engine};
 use notify::RecommendedWatcher;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::{
     fs, io,
     path::{Path, PathBuf},
@@ -83,6 +83,11 @@ pub struct FileMetadata {
     directory: String,
     size_bytes: u64,
     modified_millis: Option<u128>,
+}
+
+#[derive(Default, Deserialize, Serialize)]
+struct Preferences {
+    theme: Option<String>,
 }
 
 impl MdvError {
@@ -288,8 +293,30 @@ pub fn open_external_url(url: String) -> Result<(), MdvError> {
     })
 }
 
+#[tauri::command]
+pub fn save_theme_preference(
+    theme: String,
+    state: State<'_, SharedState>,
+) -> Result<String, MdvError> {
+    let theme = normalize_theme(&theme);
+    let preferences = Preferences {
+        theme: Some(theme.clone()),
+    };
+
+    save_preferences(&preferences)?;
+
+    let mut inner = state.inner.lock().expect("runtime state poisoned");
+    inner.config.theme = theme.clone();
+
+    Ok(theme)
+}
+
 fn parse_cli_args() -> RuntimeConfig {
     let mut config = RuntimeConfig::default();
+    if let Some(theme) = load_preferences().theme {
+        config.theme = normalize_theme(&theme);
+    }
+
     let mut args = std::env::args().skip(1);
 
     while let Some(arg) = args.next() {
@@ -316,6 +343,101 @@ fn parse_cli_args() -> RuntimeConfig {
     }
 
     config
+}
+
+fn load_preferences() -> Preferences {
+    let Some(path) = preferences_path() else {
+        return Preferences::default();
+    };
+
+    let Ok(content) = fs::read_to_string(path) else {
+        return Preferences::default();
+    };
+
+    serde_json::from_str(&content).unwrap_or_default()
+}
+
+fn save_preferences(preferences: &Preferences) -> Result<(), MdvError> {
+    let path = preferences_path().ok_or_else(|| {
+        MdvError::new(
+            "PreferencesError",
+            "Could not resolve the preferences directory.",
+        )
+    })?;
+    let parent = path.parent().ok_or_else(|| {
+        MdvError::new(
+            "PreferencesError",
+            "Could not resolve the preferences directory.",
+        )
+    })?;
+
+    fs::create_dir_all(parent).map_err(|error| {
+        MdvError::new(
+            "PreferencesError",
+            "Could not create preferences directory.",
+        )
+        .with_path(parent.display().to_string())
+        .with_details(error.to_string())
+    })?;
+
+    let content = serde_json::to_string_pretty(preferences).map_err(|error| {
+        MdvError::new("PreferencesError", "Could not serialize preferences.")
+            .with_details(error.to_string())
+    })?;
+
+    fs::write(&path, content).map_err(|error| {
+        MdvError::new("PreferencesError", "Could not save preferences.")
+            .with_path(path.display().to_string())
+            .with_details(error.to_string())
+    })
+}
+
+fn preferences_path() -> Option<PathBuf> {
+    platform_preferences_path()
+}
+
+#[cfg(target_os = "windows")]
+fn platform_preferences_path() -> Option<PathBuf> {
+    if let Some(app_data) = std::env::var_os("APPDATA") {
+        return Some(PathBuf::from(app_data).join("mdv").join("preferences.json"));
+    }
+
+    std::env::var_os("USERPROFILE").map(|home| {
+        PathBuf::from(home)
+            .join("AppData")
+            .join("Roaming")
+            .join("mdv")
+            .join("preferences.json")
+    })
+}
+
+#[cfg(target_os = "macos")]
+fn platform_preferences_path() -> Option<PathBuf> {
+    std::env::var_os("HOME").map(|home| {
+        PathBuf::from(home)
+            .join("Library")
+            .join("Application Support")
+            .join("mdv")
+            .join("preferences.json")
+    })
+}
+
+#[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
+fn platform_preferences_path() -> Option<PathBuf> {
+    if let Some(config_home) = std::env::var_os("XDG_CONFIG_HOME") {
+        return Some(
+            PathBuf::from(config_home)
+                .join("mdv")
+                .join("preferences.json"),
+        );
+    }
+
+    std::env::var_os("HOME").map(|home| {
+        PathBuf::from(home)
+            .join(".config")
+            .join("mdv")
+            .join("preferences.json")
+    })
 }
 
 fn normalize_theme(value: &str) -> String {

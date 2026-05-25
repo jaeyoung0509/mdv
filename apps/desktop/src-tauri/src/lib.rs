@@ -3,7 +3,8 @@ mod watcher;
 
 use commands::{
     get_file_metadata, get_initial_state, initialize_state, open_external_url, read_markdown,
-    reload_document, resolve_image_src, resolve_input_path, watch_file, SharedState,
+    reload_document, resolve_image_src, resolve_input_path, save_theme_preference, watch_file,
+    SharedState,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -18,7 +19,8 @@ pub fn run() {
             read_markdown,
             resolve_input_path,
             get_file_metadata,
-            watch_file
+            watch_file,
+            save_theme_preference
         ])
         .setup(|app| {
             initialize_state(&app.handle());

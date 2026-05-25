@@ -9,6 +9,15 @@
 }
 
 .mdv-markdown.markdown-body {
+  color-scheme: inherit;
+  --fgColor-accent: var(--app-accent);
+  --fgColor-default: var(--app-text);
+  --fgColor-muted: var(--app-muted);
+  --bgColor-default: transparent;
+  --bgColor-muted: var(--app-surface-raised);
+  --bgColor-neutral-muted: color-mix(in srgb, var(--app-border) 64%, transparent);
+  --borderColor-default: var(--app-border);
+  --borderColor-muted: color-mix(in srgb, var(--app-border) 72%, transparent);
   --color-accent-fg: var(--app-accent);
   --color-border-default: var(--app-border);
   --color-canvas-default: transparent;
@@ -185,6 +194,26 @@
 .mdv-markdown table {
   display: table;
   width: 100%;
+  border-color: var(--app-border);
+}
+
+.mdv-markdown table tr {
+  background-color: transparent;
+  border-top-color: var(--app-border);
+}
+
+.mdv-markdown table tr:nth-child(2n) {
+  background-color: var(--app-surface-raised);
+}
+
+.mdv-markdown table th,
+.mdv-markdown table td {
+  border-color: var(--app-border);
+  color: var(--app-text);
+}
+
+.mdv-markdown table th {
+  background-color: color-mix(in srgb, var(--app-surface-raised) 72%, var(--app-surface));
 }
 
 .mdv-markdown img {
