@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync, statSync } from "node:fs";
+import { accessSync, constants, existsSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
@@ -115,10 +115,55 @@ function executablePath(root) {
 
   return candidates.find((candidate) => {
     try {
-      return existsSync(candidate) && statSync(candidate).isFile();
+      if (!existsSync(candidate) || !statSync(candidate).isFile()) {
+        return false;
+      }
+
+      if (process.platform !== "win32") {
+        accessSync(candidate, constants.X_OK);
+      }
+
+      return true;
     } catch {
       return false;
     }
+  });
+}
+
+function launchDesktopApp(binary, appArgs) {
+  const child = spawn(binary, appArgs, {
+    detached: true,
+    stdio: "ignore",
+    windowsHide: true,
+  });
+
+  child.on("error", (error) => {
+    console.error(`mdv: ${error.message}`);
+    process.exit(1);
+  });
+
+  child.unref();
+}
+
+function launchDevelopmentApp(desktopDir, appArgs) {
+  const child = spawn("pnpm", ["tauri", "dev", "--", ...appArgs], {
+    cwd: desktopDir,
+    stdio: "inherit",
+    env: process.env,
+  });
+
+  child.on("exit", (code, signal) => {
+    if (signal) {
+      process.kill(process.pid, signal);
+      return;
+    }
+
+    process.exit(code ?? 0);
+  });
+
+  child.on("error", (error) => {
+    console.error(`mdv: ${error.message}`);
+    process.exit(1);
   });
 }
 
@@ -137,27 +182,12 @@ function launch(options) {
   }
 
   const binary = executablePath(root);
-  const child = binary
-    ? spawn(binary, appArgs, { stdio: "inherit" })
-    : spawn("pnpm", ["tauri", "dev", "--", ...appArgs], {
-        cwd: desktopDir,
-        stdio: "inherit",
-        env: process.env,
-      });
+  if (binary) {
+    launchDesktopApp(binary, appArgs);
+    return;
+  }
 
-  child.on("exit", (code, signal) => {
-    if (signal) {
-      process.kill(process.pid, signal);
-      return;
-    }
-
-    process.exit(code ?? 0);
-  });
-
-  child.on("error", (error) => {
-    console.error(`mdv: ${error.message}`);
-    process.exit(1);
-  });
+  launchDevelopmentApp(desktopDir, appArgs);
 }
 
 try {
