@@ -1,4 +1,9 @@
-import type { FontPreset, ReaderBookmark, ReaderPreferences } from "./types";
+import type { AiProvider, AiSettings, FontPreset, ReaderBookmark, ReaderPreferences } from "./types";
+
+export const DEFAULT_AI_SETTINGS: AiSettings = {
+  activeProviderId: "",
+  providers: [],
+};
 
 export const DEFAULT_READER_PREFERENCES: ReaderPreferences = {
   theme: "system",
@@ -8,6 +13,7 @@ export const DEFAULT_READER_PREFERENCES: ReaderPreferences = {
   contentWidth: 780,
   outlineVisible: true,
   bookmarks: {},
+  ai: DEFAULT_AI_SETTINGS,
 };
 
 export const FONT_PRESET_LABELS: Record<FontPreset, string> = {
@@ -38,13 +44,45 @@ function normalizeBookmarks(
       .map(([documentPath, documentBookmarks]) => {
         const normalizedBookmarks = Array.isArray(documentBookmarks)
           ? documentBookmarks
-              .map((bookmark) => ({
-                id: String(bookmark.id || ""),
-                label: String(bookmark.label || "Bookmark"),
-                scrollY: clamp(Number(bookmark.scrollY) || 0, 0, 4_294_967_295),
-                headingId: bookmark.headingId ? String(bookmark.headingId) : undefined,
-                createdAt: Number(bookmark.createdAt) || Date.now(),
-              }))
+              .map((bookmark) => {
+                const oldBookmark = bookmark as Partial<ReaderBookmark> & {
+                  scrollY?: unknown;
+                  headingId?: unknown;
+                };
+                const fallbackScrollY = clamp(
+                  Number(
+                    bookmark.target?.kind === "heading"
+                      ? bookmark.target.scrollYFallback
+                      : bookmark.target?.kind === "offset"
+                        ? bookmark.target.scrollY
+                        : oldBookmark.scrollY,
+                  ) || 0,
+                  0,
+                  4_294_967_295,
+                );
+                const headingId =
+                  bookmark.target?.kind === "heading"
+                    ? String(bookmark.target.headingId || "")
+                    : oldBookmark.headingId
+                      ? String(oldBookmark.headingId)
+                      : "";
+
+                return {
+                  id: String(bookmark.id || ""),
+                  label: String(bookmark.label || "Bookmark"),
+                  target: headingId
+                    ? {
+                        kind: "heading" as const,
+                        headingId,
+                        scrollYFallback: fallbackScrollY,
+                      }
+                    : {
+                        kind: "offset" as const,
+                        scrollY: fallbackScrollY,
+                      },
+                  createdAt: Number(bookmark.createdAt) || Date.now(),
+                };
+              })
               .filter((bookmark) => bookmark.id)
               .slice(0, 40)
           : [];
@@ -53,6 +91,60 @@ function normalizeBookmarks(
       })
       .filter(([documentPath, documentBookmarks]) => documentPath && documentBookmarks.length > 0),
   );
+}
+
+function normalizeAiProvider(provider: Partial<AiProvider>, index: number): AiProvider | null {
+  if (isGeneratedDefaultAiProvider(provider)) {
+    return null;
+  }
+
+  const kind = provider.kind === "claude" ? "claude" : "openaiCompatible";
+  const id = String(provider.id || `${kind}-${index}-${Date.now()}`).trim();
+  const name = String(provider.name || id).trim();
+  const baseUrl = String(provider.baseUrl || "").trim();
+  const model = String(provider.model || "").trim();
+  const reasoning = String(provider.reasoning || "").trim();
+
+  if (!id || !name) {
+    return null;
+  }
+
+  return {
+    id,
+    name,
+    kind,
+    baseUrl,
+    model,
+    reasoning,
+    hasApiKey: Boolean(provider.hasApiKey),
+  };
+}
+
+function isGeneratedDefaultAiProvider(provider: Partial<AiProvider>): boolean {
+  return (
+    (provider.id === "openai-default" &&
+      provider.baseUrl === "https://api.openai.com/v1" &&
+      provider.model === "gpt-5.4-mini") ||
+    (provider.id === "claude-default" &&
+      provider.baseUrl === "https://api.anthropic.com/v1" &&
+      provider.model === "claude-sonnet-4-6")
+  );
+}
+
+export function normalizeAiSettings(ai: Partial<AiSettings> | undefined): AiSettings {
+  const providers = (Array.isArray(ai?.providers) ? ai.providers : [])
+    .map((provider, index) => normalizeAiProvider(provider, index))
+    .filter((provider): provider is AiProvider => Boolean(provider))
+    .slice(0, 8);
+  const nextProviders = providers;
+  const activeProviderId = nextProviders.some((provider) => provider.id === ai?.activeProviderId)
+    ? String(ai?.activeProviderId)
+    : nextProviders[0]?.id || "";
+
+  return {
+    activeProviderId,
+    providers: nextProviders,
+  };
 }
 
 export function normalizeReaderPreferences(
@@ -86,5 +178,6 @@ export function normalizeReaderPreferences(
         ? preferences.outlineVisible
         : DEFAULT_READER_PREFERENCES.outlineVisible,
     bookmarks: normalizeBookmarks(preferences.bookmarks),
+    ai: normalizeAiSettings(preferences.ai),
   };
 }

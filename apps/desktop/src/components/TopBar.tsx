@@ -1,4 +1,13 @@
-import { BookmarkPlus, Check, Copy, FolderOpen, ListTree, Settings } from "lucide-react";
+import {
+  BookmarkPlus,
+  Check,
+  Copy,
+  FolderOpen,
+  ListTree,
+  Search,
+  Settings,
+  Sparkles,
+} from "lucide-react";
 import type { DocumentPayload } from "../lib/types";
 
 interface TopBarProps {
@@ -6,7 +15,11 @@ interface TopBarProps {
   watch: boolean;
   outlineVisible: boolean;
   opening?: boolean;
+  aiPanelOpen?: boolean;
+  findOpen?: boolean;
   onBookmarkAdd: () => void;
+  onAiToggle: () => void;
+  onFindToggle: () => void;
   onOpenFile: () => void;
   onOutlineToggle: () => void;
   onSettingsToggle: () => void;
@@ -17,7 +30,11 @@ export function TopBar({
   watch,
   outlineVisible,
   opening = false,
+  aiPanelOpen = false,
+  findOpen = false,
   onBookmarkAdd,
+  onAiToggle,
+  onFindToggle,
   onOpenFile,
   onOutlineToggle,
   onSettingsToggle,
@@ -71,6 +88,17 @@ export function TopBar({
         <button
           type="button"
           className="icon-button"
+          title="Find in document"
+          aria-pressed={findOpen}
+          onClick={onFindToggle}
+          disabled={!document}
+        >
+          <Search size={15} aria-hidden="true" />
+        </button>
+
+        <button
+          type="button"
+          className="icon-button"
           title="Copy file path"
           onClick={copyPath}
           disabled={!document}
@@ -81,11 +109,21 @@ export function TopBar({
         <button
           type="button"
           className="icon-button"
-          title="Add bookmark"
+          title="Toggle bookmark for current heading"
           onClick={onBookmarkAdd}
           disabled={!document}
         >
           <BookmarkPlus size={15} aria-hidden="true" />
+        </button>
+
+        <button
+          type="button"
+          className="icon-button"
+          title="Ask AI"
+          aria-pressed={aiPanelOpen}
+          onClick={onAiToggle}
+        >
+          <Sparkles size={15} aria-hidden="true" />
         </button>
 
         <button

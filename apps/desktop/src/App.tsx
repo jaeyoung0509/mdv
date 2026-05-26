@@ -1,28 +1,38 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { AiPanel } from "./components/AiPanel";
 import { EmptyState } from "./components/EmptyState";
 import { ErrorState } from "./components/ErrorState";
 import { FileDropOverlay } from "./components/FileDropOverlay";
+import { FindPanel } from "./components/FindPanel";
 import { MarkdownView } from "./components/MarkdownView";
 import { OutlinePanel } from "./components/OutlinePanel";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { TopBar } from "./components/TopBar";
 import {
   DEFAULT_READER_PREFERENCES,
+  normalizeAiSettings,
   normalizeReaderPreferences,
 } from "./lib/preferences";
 import { applyTheme, subscribeToSystemTheme } from "./lib/theme";
 import type {
   DocumentPayload,
   EffectiveTheme,
+  AiContextItem,
+  AiCompleteEvent,
+  AiErrorEvent,
+  AiSettings,
+  AiStreamEvent,
   InitialState,
   MdvError,
   ReaderBookmark,
   OutlineHeading,
   ReaderPreferences,
 } from "./lib/types";
+
+const TEXT_CONTEXT_LIMIT = 40 * 1024;
 
 function isTauriRuntime(): boolean {
   return "__TAURI_INTERNALS__" in window;
@@ -49,6 +59,22 @@ function getCurrentHeading(headings: OutlineHeading[]): OutlineHeading | null {
   return currentHeading;
 }
 
+function isTextContextPath(path: string): boolean {
+  return /\.(md|markdown|txt)$/i.test(path);
+}
+
+function fileNameFromPath(path: string): string {
+  return path.split(/[\\/]/).pop() || path;
+}
+
+function truncateContextText(value: string): string {
+  if (value.length <= TEXT_CONTEXT_LIMIT) {
+    return value;
+  }
+
+  return `${value.slice(0, TEXT_CONTEXT_LIMIT / 2)}\n\n[truncated: context item exceeded 40KB]\n\n${value.slice(-TEXT_CONTEXT_LIMIT / 4)}`;
+}
+
 export default function App() {
   const [document, setDocument] = useState<DocumentPayload | null>(null);
   const [error, setError] = useState<MdvError | null>(null);
@@ -61,6 +87,19 @@ export default function App() {
   const [dragActive, setDragActive] = useState(false);
   const [opening, setOpening] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [aiPanelOpen, setAiPanelOpen] = useState(false);
+  const [findOpen, setFindOpen] = useState(false);
+  const [aiContextItems, setAiContextItems] = useState<AiContextItem[]>([]);
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [aiAnswer, setAiAnswer] = useState("");
+  const [aiStatus, setAiStatus] = useState<"idle" | "streaming" | "error">("idle");
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [selectionChip, setSelectionChip] = useState<{
+    text: string;
+    x: number;
+    y: number;
+  } | null>(null);
+  const aiRunIdRef = useRef<string | null>(null);
 
   const toMdvError = useCallback((reason: unknown, message: string): MdvError => {
     if (
@@ -83,6 +122,8 @@ export default function App() {
     setDocument(nextDocument);
     setError(null);
     setHeadings([]);
+    setSelectionChip(null);
+    setFindOpen(false);
     requestAnimationFrame(() => window.scrollTo({ top: 0 }));
   }, []);
 
@@ -170,8 +211,19 @@ export default function App() {
     updatePreferences((current) => ({
       ...DEFAULT_READER_PREFERENCES,
       bookmarks: current.bookmarks,
+      ai: current.ai,
     }));
   }, [updatePreferences]);
+
+  const changeAiSettings = useCallback(
+    (settings: AiSettings) => {
+      updatePreferences((current) => ({
+        ...current,
+        ai: normalizeAiSettings(settings),
+      }));
+    },
+    [updatePreferences],
+  );
 
   const toggleOutline = useCallback(() => {
     setPreferences((current) => {
@@ -188,42 +240,125 @@ export default function App() {
     setHeadings(nextHeadings);
   }, []);
 
-  const addBookmark = useCallback(() => {
+  const toggleHeadingBookmark = useCallback(
+    (headingId: string, label: string) => {
+      if (!document) {
+        return;
+      }
+
+      const element = window.document.getElementById(headingId);
+      const scrollYFallback = Math.max(
+        0,
+        Math.round((element?.getBoundingClientRect().top ?? 0) + window.scrollY),
+      );
+      const createdAt = Date.now();
+
+      updatePreferences((current) => {
+        const currentBookmarks = current.bookmarks[document.path] ?? [];
+        const existing = currentBookmarks.find(
+          (bookmark) =>
+            bookmark.target.kind === "heading" && bookmark.target.headingId === headingId,
+        );
+        const bookmarks = { ...current.bookmarks };
+
+        if (existing) {
+          const nextBookmarks = currentBookmarks.filter((bookmark) => bookmark.id !== existing.id);
+
+          if (nextBookmarks.length > 0) {
+            bookmarks[document.path] = nextBookmarks;
+          } else {
+            delete bookmarks[document.path];
+          }
+
+          return {
+            ...current,
+            bookmarks,
+          };
+        }
+
+        const nextBookmark: ReaderBookmark = {
+          id: `${createdAt}-${Math.random().toString(36).slice(2, 8)}`,
+          label,
+          target: {
+            kind: "heading",
+            headingId,
+            scrollYFallback,
+          },
+          createdAt,
+        };
+
+        return {
+          ...current,
+          bookmarks: {
+            ...current.bookmarks,
+            [document.path]: [nextBookmark, ...currentBookmarks].slice(0, 40),
+          },
+        };
+      });
+    },
+    [document, updatePreferences],
+  );
+
+  const toggleCurrentBookmark = useCallback(() => {
     if (!document) {
       return;
     }
 
     const heading = getCurrentHeading(headings);
+
+    if (heading) {
+      toggleHeadingBookmark(heading.id, heading.text);
+      return;
+    }
+
     const scrollY = Math.max(0, Math.round(window.scrollY));
     const createdAt = Date.now();
-    const nextBookmark: ReaderBookmark = {
-      id: `${createdAt}-${Math.random().toString(36).slice(2, 8)}`,
-      label: heading?.text || `${document.fileName} at ${scrollY}px`,
-      scrollY,
-      headingId: heading?.id,
-      createdAt,
-    };
 
     updatePreferences((current) => {
       const currentBookmarks = current.bookmarks[document.path] ?? [];
-      const dedupedBookmarks = currentBookmarks.filter((bookmark) => {
-        if (heading?.id) {
-          return bookmark.headingId !== heading.id;
+      const existing = currentBookmarks.find((bookmark) => {
+        if (bookmark.target.kind !== "offset") {
+          return false;
         }
 
-        return Math.abs(bookmark.scrollY - scrollY) > 32;
+        return Math.abs(bookmark.target.scrollY - scrollY) <= 32;
       });
+      const bookmarks = { ...current.bookmarks };
+
+      if (existing) {
+        const nextBookmarks = currentBookmarks.filter((bookmark) => bookmark.id !== existing.id);
+
+        if (nextBookmarks.length > 0) {
+          bookmarks[document.path] = nextBookmarks;
+        } else {
+          delete bookmarks[document.path];
+        }
+
+        return {
+          ...current,
+          bookmarks,
+        };
+      }
+
+      const nextBookmark: ReaderBookmark = {
+        id: `${createdAt}-${Math.random().toString(36).slice(2, 8)}`,
+        label: `${document.fileName} at ${scrollY}px`,
+        target: {
+          kind: "offset",
+          scrollY,
+        },
+        createdAt,
+      };
 
       return {
         ...current,
-        outlineVisible: true,
         bookmarks: {
           ...current.bookmarks,
-          [document.path]: [nextBookmark, ...dedupedBookmarks].slice(0, 40),
+          [document.path]: [nextBookmark, ...currentBookmarks].slice(0, 40),
         },
       };
     });
-  }, [document, headings, updatePreferences]);
+  }, [document, headings, toggleHeadingBookmark, updatePreferences]);
 
   const removeBookmark = useCallback(
     (bookmarkId: string) => {
@@ -253,18 +388,130 @@ export default function App() {
   );
 
   const selectBookmark = useCallback((bookmark: ReaderBookmark) => {
-    if (bookmark.headingId) {
-      const heading = window.document.getElementById(bookmark.headingId);
+    if (bookmark.target.kind === "heading") {
+      const heading = window.document.getElementById(bookmark.target.headingId);
 
       if (heading) {
         heading.scrollIntoView({ behavior: "smooth", block: "start" });
-        window.history.replaceState(null, "", `#${bookmark.headingId}`);
+        window.history.replaceState(null, "", `#${bookmark.target.headingId}`);
         return;
       }
+
+      window.scrollTo({ top: bookmark.target.scrollYFallback, behavior: "smooth" });
+      return;
     }
 
-    window.scrollTo({ top: bookmark.scrollY, behavior: "smooth" });
+    window.scrollTo({ top: bookmark.target.scrollY, behavior: "smooth" });
   }, []);
+
+  const addAiContextItems = useCallback((items: AiContextItem[]) => {
+    setAiContextItems((current) => {
+      const selectionItems = items.filter((item) => item.kind === "selection");
+      const otherItems = items.filter((item) => item.kind !== "selection");
+      const baseItems = selectionItems.length > 0
+        ? current.filter((item) => item.kind !== "selection")
+        : current;
+      const nextSelection = selectionItems.at(-1);
+      const nextItems = nextSelection
+        ? [...baseItems, ...otherItems, nextSelection]
+        : [...baseItems, ...otherItems];
+
+      return nextItems.slice(-8);
+    });
+  }, []);
+
+  const removeAiContextItem = useCallback((index: number) => {
+    setAiContextItems((current) => current.filter((_, itemIndex) => itemIndex !== index));
+  }, []);
+
+  const addSelectionToAi = useCallback(
+    (text: string) => {
+      addAiContextItems([
+        {
+          kind: "selection",
+          label: "Selection",
+          text: truncateContextText(text),
+        },
+      ]);
+      setAiPanelOpen(true);
+      setSelectionChip(null);
+    },
+    [addAiContextItems],
+  );
+
+  const sendAiQuestion = useCallback(async () => {
+    const provider =
+      preferences.ai.providers.find(
+        (candidate) => candidate.id === preferences.ai.activeProviderId,
+      ) ?? preferences.ai.providers[0];
+
+    if (!provider || !aiPrompt.trim()) {
+      return;
+    }
+
+    const requestContextItems: AiContextItem[] = document
+      ? [
+          {
+            kind: "documentExcerpt",
+            label: document.fileName,
+            text: truncateContextText(document.content),
+          },
+          ...aiContextItems,
+        ]
+      : aiContextItems;
+
+    setAiAnswer("");
+    setAiError(null);
+    setAiStatus("streaming");
+
+    try {
+      const runId = await invoke<string>("start_ai_chat", {
+        request: {
+          providerId: provider.id,
+          prompt: aiPrompt.trim(),
+          contextItems: requestContextItems,
+        },
+      });
+      aiRunIdRef.current = runId;
+    } catch (reason: unknown) {
+      setAiStatus("error");
+      setAiError(toMdvError(reason, "Could not start AI chat.").message);
+    }
+  }, [aiContextItems, aiPrompt, document, preferences.ai, toMdvError]);
+
+  const cancelAiQuestion = useCallback(() => {
+    if (!aiRunIdRef.current) {
+      return;
+    }
+
+    invoke("cancel_ai_chat", { runId: aiRunIdRef.current }).catch(() => {
+      // The run may have already completed.
+    });
+    aiRunIdRef.current = null;
+    setAiStatus("idle");
+  }, []);
+
+  const updateAiProvider = useCallback(
+    (providerId: string) => {
+      changeAiSettings({
+        ...preferences.ai,
+        activeProviderId: providerId,
+      });
+    },
+    [changeAiSettings, preferences.ai],
+  );
+
+  const handleTextSelection = useCallback((text: string, position: { x: number; y: number }) => {
+    setSelectionChip({ text, x: position.x, y: position.y });
+  }, []);
+
+  const toggleFind = useCallback(() => {
+    if (!document) {
+      return;
+    }
+
+    setFindOpen((open) => !open);
+  }, [document]);
 
   useEffect(() => {
     if (!isTauriRuntime()) {
@@ -279,6 +526,13 @@ export default function App() {
         setAllowHtml(state.allowHtml);
         setDocument(state.document);
         setError(state.error);
+        invoke<AiSettings>("get_ai_settings")
+          .then((ai) => {
+            setPreferences((current) => normalizeReaderPreferences({ ...current, ai }));
+          })
+          .catch(() => {
+            // Reader settings can still load if keychain metadata is unavailable.
+          });
       })
       .catch((reason: unknown) => {
         setError({
@@ -289,6 +543,23 @@ export default function App() {
       })
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    const handleFindShortcut = (event: KeyboardEvent) => {
+      if (!document || event.altKey || event.shiftKey) {
+        return;
+      }
+
+      if ((event.metaKey || event.ctrlKey) && event.key.toLocaleLowerCase() === "f") {
+        event.preventDefault();
+        setFindOpen(true);
+      }
+    };
+
+    window.addEventListener("keydown", handleFindShortcut);
+
+    return () => window.removeEventListener("keydown", handleFindShortcut);
+  }, [document]);
 
   useEffect(() => {
     setEffectiveTheme(applyTheme(preferences.theme));
@@ -334,6 +605,86 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const clearSelectionChipIfEmpty = () => {
+      const selectedText = window.getSelection()?.toString().trim() ?? "";
+
+      if (!selectedText) {
+        setSelectionChip(null);
+      }
+    };
+    const clearSelectionChip = (event: Event) => {
+      const target = event.target;
+
+      if (target instanceof Element && target.closest(".ask-ai-chip, .ai-panel")) {
+        return;
+      }
+
+      setSelectionChip(null);
+    };
+
+    window.document.addEventListener("selectionchange", clearSelectionChipIfEmpty);
+    window.document.addEventListener("pointerdown", clearSelectionChip);
+    window.document.addEventListener("dragstart", clearSelectionChip);
+    window.addEventListener("scroll", clearSelectionChip, { passive: true });
+
+    return () => {
+      window.document.removeEventListener("selectionchange", clearSelectionChipIfEmpty);
+      window.document.removeEventListener("pointerdown", clearSelectionChip);
+      window.document.removeEventListener("dragstart", clearSelectionChip);
+      window.removeEventListener("scroll", clearSelectionChip);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isTauriRuntime()) {
+      return;
+    }
+
+    let unlistenStream: (() => void) | undefined;
+    let unlistenComplete: (() => void) | undefined;
+    let unlistenError: (() => void) | undefined;
+
+    listen<AiStreamEvent>("mdv:ai-stream", (event) => {
+      if (event.payload.runId !== aiRunIdRef.current) {
+        return;
+      }
+
+      setAiAnswer((current) => current + event.payload.delta);
+    }).then((dispose) => {
+      unlistenStream = dispose;
+    });
+
+    listen<AiCompleteEvent>("mdv:ai-complete", (event) => {
+      if (event.payload.runId !== aiRunIdRef.current) {
+        return;
+      }
+
+      aiRunIdRef.current = null;
+      setAiStatus("idle");
+    }).then((dispose) => {
+      unlistenComplete = dispose;
+    });
+
+    listen<AiErrorEvent>("mdv:ai-error", (event) => {
+      if (event.payload.runId !== aiRunIdRef.current) {
+        return;
+      }
+
+      aiRunIdRef.current = null;
+      setAiStatus("error");
+      setAiError(event.payload.details || event.payload.message);
+    }).then((dispose) => {
+      unlistenError = dispose;
+    });
+
+    return () => {
+      unlistenStream?.();
+      unlistenComplete?.();
+      unlistenError?.();
+    };
+  }, []);
+
+  useEffect(() => {
     if (!isTauriRuntime()) {
       return;
     }
@@ -359,6 +710,31 @@ export default function App() {
         const [path] = payload.paths;
 
         if (path) {
+          if (aiPanelOpen) {
+            if (!isTextContextPath(path)) {
+              setAiStatus("error");
+              setAiError("Only .md, .markdown, and .txt files can be used as AI context.");
+              return;
+            }
+
+            invoke<string>("read_markdown", { path })
+              .then((text) => {
+                addAiContextItems([
+                  {
+                    kind: "file",
+                    label: fileNameFromPath(path),
+                    text: truncateContextText(text),
+                  },
+                ]);
+                setAiPanelOpen(true);
+              })
+              .catch((reason: unknown) => {
+                setAiStatus("error");
+                setAiError(toMdvError(reason, "Could not read this AI context file.").message);
+              });
+            return;
+          }
+
           void openDocumentPath(path);
         }
       })
@@ -378,7 +754,21 @@ export default function App() {
       disposed = true;
       unlisten?.();
     };
-  }, [openDocumentPath]);
+  }, [addAiContextItems, aiPanelOpen, openDocumentPath, toMdvError]);
+
+  const noMarkdown = error?.kind === "NoMarkdownFiles";
+  const documentBookmarks = document ? (preferences.bookmarks[document.path] ?? []) : [];
+  const bookmarkedHeadingIds = useMemo(
+    () =>
+      new Set(
+        documentBookmarks
+          .filter((bookmark) => bookmark.target.kind === "heading")
+          .map((bookmark) =>
+            bookmark.target.kind === "heading" ? bookmark.target.headingId : "",
+          ),
+      ),
+    [documentBookmarks],
+  );
 
   if (loading) {
     return (
@@ -388,10 +778,20 @@ export default function App() {
           watch={watch}
           outlineVisible={preferences.outlineVisible}
           opening={opening}
-          onBookmarkAdd={addBookmark}
+          aiPanelOpen={aiPanelOpen}
+          findOpen={findOpen}
+          onBookmarkAdd={toggleCurrentBookmark}
+          onAiToggle={() => {
+            setSettingsOpen(false);
+            setAiPanelOpen((open) => !open);
+          }}
+          onFindToggle={toggleFind}
           onOpenFile={openFilePicker}
           onOutlineToggle={toggleOutline}
-          onSettingsToggle={() => setSettingsOpen(true)}
+          onSettingsToggle={() => {
+            setAiPanelOpen(false);
+            setSettingsOpen(true);
+          }}
         />
         <main className="state-view">
           <section className="state-panel">
@@ -403,9 +803,6 @@ export default function App() {
     );
   }
 
-  const noMarkdown = error?.kind === "NoMarkdownFiles";
-  const documentBookmarks = document ? (preferences.bookmarks[document.path] ?? []) : [];
-
   return (
     <div className="app-frame">
       <TopBar
@@ -413,10 +810,20 @@ export default function App() {
         watch={watch}
         outlineVisible={preferences.outlineVisible}
         opening={opening}
-        onBookmarkAdd={addBookmark}
+        aiPanelOpen={aiPanelOpen}
+        findOpen={findOpen}
+        onBookmarkAdd={toggleCurrentBookmark}
+        onAiToggle={() => {
+          setSettingsOpen(false);
+          setAiPanelOpen((open) => !open);
+        }}
+        onFindToggle={toggleFind}
         onOpenFile={openFilePicker}
         onOutlineToggle={toggleOutline}
-        onSettingsToggle={() => setSettingsOpen(true)}
+        onSettingsToggle={() => {
+          setAiPanelOpen(false);
+          setSettingsOpen(true);
+        }}
       />
       {document && !error ? (
         <div
@@ -437,7 +844,10 @@ export default function App() {
             allowHtml={allowHtml}
             preferences={preferences}
             theme={effectiveTheme}
+            bookmarkedHeadingIds={bookmarkedHeadingIds}
             onHeadingsChange={updateHeadings}
+            onHeadingBookmarkToggle={toggleHeadingBookmark}
+            onTextSelection={handleTextSelection}
           />
         </div>
       ) : noMarkdown ? (
@@ -467,9 +877,44 @@ export default function App() {
         open={settingsOpen}
         preferences={preferences}
         onChange={changePreferences}
+        onAiChange={changeAiSettings}
         onClose={() => setSettingsOpen(false)}
         onReset={resetPreferences}
       />
+      <AiPanel
+        answer={aiAnswer}
+        contextItems={aiContextItems}
+        currentDocumentLabel={document?.fileName}
+        error={aiError}
+        open={aiPanelOpen}
+        prompt={aiPrompt}
+        settings={preferences.ai}
+        status={aiStatus}
+        onCancel={cancelAiQuestion}
+        onClose={() => setAiPanelOpen(false)}
+        onContextAdd={addAiContextItems}
+        onContextRemove={removeAiContextItem}
+        onPromptChange={setAiPrompt}
+        onProviderChange={updateAiProvider}
+        onSend={sendAiQuestion}
+      />
+      <FindPanel
+        documentKey={document?.path}
+        open={findOpen && Boolean(document && !error)}
+        rootSelector=".document-shell .mdv-markdown"
+        onClose={() => setFindOpen(false)}
+      />
+      {selectionChip ? (
+        <button
+          type="button"
+          className="ask-ai-chip"
+          style={{ left: selectionChip.x, top: selectionChip.y }}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => addSelectionToAi(selectionChip.text)}
+        >
+          Ask AI
+        </button>
+      ) : null}
       {settingsOpen ? (
         <button
           type="button"
@@ -486,7 +931,7 @@ export default function App() {
           onClick={() => changePreferences({ outlineVisible: false })}
         />
       ) : null}
-      <FileDropOverlay active={dragActive} />
+      <FileDropOverlay active={dragActive && !aiPanelOpen} />
     </div>
   );
 }

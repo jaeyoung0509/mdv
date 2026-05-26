@@ -12,14 +12,71 @@ export interface ReaderPreferences {
   contentWidth: number;
   outlineVisible: boolean;
   bookmarks: Record<string, ReaderBookmark[]>;
+  ai: AiSettings;
 }
+
+export type BookmarkTarget =
+  | {
+      kind: "heading";
+      headingId: string;
+      scrollYFallback: number;
+    }
+  | {
+      kind: "offset";
+      scrollY: number;
+    };
 
 export interface ReaderBookmark {
   id: string;
   label: string;
-  scrollY: number;
-  headingId?: string;
+  target: BookmarkTarget;
   createdAt: number;
+}
+
+export type AiProviderKind = "openaiCompatible" | "claude";
+
+export interface AiProvider {
+  id: string;
+  name: string;
+  kind: AiProviderKind;
+  baseUrl: string;
+  model: string;
+  reasoning: string;
+  hasApiKey: boolean;
+}
+
+export interface AiSettings {
+  activeProviderId: string;
+  providers: AiProvider[];
+}
+
+export interface AiContextItem {
+  kind: "selection" | "file" | "documentExcerpt";
+  label: string;
+  text: string;
+}
+
+export interface AiChatRequest {
+  providerId: string;
+  prompt: string;
+  contextItems: AiContextItem[];
+  conversationId?: string;
+}
+
+export interface AiStreamEvent {
+  runId: string;
+  delta: string;
+}
+
+export interface AiCompleteEvent {
+  runId: string;
+  usage?: unknown;
+}
+
+export interface AiErrorEvent {
+  runId: string;
+  message: string;
+  details?: string;
 }
 
 export interface OutlineHeading {

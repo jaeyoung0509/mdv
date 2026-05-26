@@ -90,6 +90,57 @@
   opacity: 1;
 }
 
+.bookmarkable-heading {
+  position: relative;
+}
+
+.bookmark-ribbon {
+  position: absolute;
+  top: 0.17em;
+  left: -34px;
+  display: inline-grid;
+  width: 24px;
+  height: 28px;
+  place-items: center;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--app-muted);
+  cursor: pointer;
+  opacity: 0;
+  transform: translateX(4px);
+  transition:
+    background-color var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard),
+    opacity var(--motion-fast) var(--ease-standard),
+    transform var(--motion-fast) var(--ease-emphasized);
+}
+
+.bookmark-ribbon::after {
+  position: absolute;
+  bottom: 3px;
+  width: 10px;
+  height: 7px;
+  background: currentColor;
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+  content: "";
+  opacity: 0.22;
+}
+
+.bookmark-ribbon:hover,
+.bookmark-ribbon:focus-visible,
+.bookmark-ribbon[aria-pressed="true"] {
+  background: var(--app-accent-soft);
+  color: var(--app-accent);
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.bookmarkable-heading:hover .bookmark-ribbon {
+  opacity: 1;
+  transform: translateX(0);
+}
+
 .mdv-markdown code {
   border-radius: 5px;
   background: var(--app-surface-raised);
@@ -274,6 +325,16 @@
 
   .mdv-markdown h1 {
     font-size: 1.8em;
+  }
+
+  .bookmark-ribbon {
+    position: relative;
+    top: auto;
+    left: auto;
+    margin-right: 6px;
+    opacity: 0.72;
+    transform: none;
+    vertical-align: middle;
   }
 
   .mdv-markdown table {
