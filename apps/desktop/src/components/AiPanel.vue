@@ -124,7 +124,9 @@ async function handleDrop(event: DragEvent) {
 
 function sendPrompt() {
   if (canSend.value) {
-    emit("send", trimmedPrompt.value);
+    const prompt = trimmedPrompt.value;
+    draftPrompt.value = "";
+    emit("send", prompt);
   }
 }
 
@@ -200,9 +202,25 @@ function handlePromptKeyDown(event: KeyboardEvent) {
         <MarkdownHtml :content="answer" />
       </section>
 
-      <p v-if="status === 'streaming' && !answer" class="ai-thinking" aria-live="polite">
-        Thinking...
-      </p>
+      <div
+        v-if="status === 'streaming' && !answer"
+        class="ai-thinking"
+        role="status"
+        aria-live="polite"
+      >
+        <div class="ai-thinking__orb" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </div>
+        <div class="ai-thinking__copy">
+          <strong>Thinking</strong>
+          <span>Reading context and drafting a response</span>
+          <div class="ai-thinking__meter" aria-hidden="true">
+            <span />
+          </div>
+        </div>
+      </div>
 
       <div v-if="error" class="ai-error" role="alert">
         <AlertCircle :size="15" aria-hidden="true" />

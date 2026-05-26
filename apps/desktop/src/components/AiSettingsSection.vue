@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { invoke } from "@tauri-apps/api/core";
 import { Check, KeyRound, Plus, Trash2 } from "@lucide/vue";
-import { reactive } from "vue";
+import { computed, reactive } from "vue";
 import { isTauriRuntime } from "../composables/useTauriRuntime";
 import { formatUnknownError } from "../lib/errors";
 import type { AiProvider, AiProviderKind, AiSettings } from "../lib/types";
@@ -15,6 +15,46 @@ const emit = defineEmits<{
 }>();
 
 const status = reactive<Record<string, string>>({});
+
+const activeProvider = computed(
+  () =>
+    props.settings.providers.find((provider) => provider.id === props.settings.activeProviderId) ??
+    props.settings.providers[0],
+);
+
+function providerKindLabel(kind: AiProviderKind): string {
+  return kind === "claude" ? "Claude" : "OpenAI-compatible";
+}
+
+function providerHealthLabel(provider: AiProvider): string {
+  if (status[provider.id]) {
+    return status[provider.id];
+  }
+
+  if (!provider.baseUrl || !provider.model) {
+    return "Needs host and model";
+  }
+
+  return provider.hasApiKey ? "Ready" : "API key missing";
+}
+
+function providerTabStatus(provider: AiProvider): string {
+  const message = status[provider.id];
+
+  if (!message) {
+    return provider.hasApiKey ? "Ready" : "Setup";
+  }
+
+  if (/failed|could not|error|bad request/i.test(message)) {
+    return "Error";
+  }
+
+  if (/testing/i.test(message)) {
+    return "Testing";
+  }
+
+  return message;
+}
 
 function createProvider(kind: AiProviderKind): AiProvider {
   const createdAt = Date.now();
@@ -121,8 +161,11 @@ async function testProvider(providerId: string) {
 
 <template>
   <section class="settings-section ai-settings" aria-label="AI settings">
-    <div class="settings-section__title">
-      <h3>AI</h3>
+    <div class="settings-section__title ai-settings__title">
+      <div>
+        <h3>AI</h3>
+        <p>Manage providers used by Ask AI.</p>
+      </div>
       <div class="settings-actions">
         <button
           type="button"
@@ -145,137 +188,160 @@ async function testProvider(providerId: string) {
       </div>
     </div>
 
-    <template v-if="settings.providers.length > 0">
-      <label class="settings-label" for="ai-active-provider">Provider</label>
-      <select
-        id="ai-active-provider"
-        class="settings-input"
-        :value="settings.activeProviderId"
-        @change="
-          emit('change', {
-            ...settings,
-            activeProviderId: ($event.currentTarget as HTMLSelectElement).value,
-          })
-        "
-      >
-        <option v-for="provider in settings.providers" :key="provider.id" :value="provider.id">
-          {{ provider.name }}
-        </option>
-      </select>
-    </template>
-    <p v-else class="settings-empty">Add a provider, then paste its host, model, and API key.</p>
+    <template v-if="settings.providers.length > 0 && activeProvider">
+      <div class="ai-provider-tabs" aria-label="AI providers">
+        <button
+          v-for="provider in settings.providers"
+          :key="provider.id"
+          type="button"
+          class="ai-provider-tab"
+          :aria-pressed="provider.id === activeProvider.id"
+          @click="emit('change', { ...settings, activeProviderId: provider.id })"
+        >
+          <span>{{ provider.name || "Unnamed provider" }}</span>
+          <small>{{ provider.model || providerKindLabel(provider.kind) }}</small>
+          <em>{{ providerTabStatus(provider) }}</em>
+        </button>
+      </div>
 
-    <div class="ai-provider-list">
-      <section v-for="provider in settings.providers" :key="provider.id" class="ai-provider-editor">
+      <section class="ai-provider-editor ai-provider-editor--active">
         <div class="ai-provider-editor__header">
-          <select
-            class="settings-input"
-            :value="provider.kind"
-            @change="
-              updateProvider(provider.id, {
-                kind: ($event.currentTarget as HTMLSelectElement).value as AiProviderKind,
-              })
-            "
-          >
-            <option value="openaiCompatible">OpenAI-compatible</option>
-            <option value="claude">Claude</option>
-          </select>
+          <div>
+            <p class="settings-kicker">Active provider</p>
+            <h4>{{ activeProvider.name || "Unnamed provider" }}</h4>
+          </div>
           <button
             type="button"
             class="icon-button"
             title="Delete provider"
-            @click="deleteProvider(provider.id)"
+            @click="deleteProvider(activeProvider.id)"
           >
             <Trash2 :size="14" aria-hidden="true" />
           </button>
         </div>
 
-        <label class="settings-label" :for="`${provider.id}-name`">Display name</label>
-        <input
-          :id="`${provider.id}-name`"
+        <label class="settings-label" :for="`${activeProvider.id}-kind`">Provider type</label>
+        <select
+          :id="`${activeProvider.id}-kind`"
           class="settings-input"
-          :value="provider.name"
-          @input="
-            updateProvider(provider.id, {
-              name: ($event.currentTarget as HTMLInputElement).value,
+          :value="activeProvider.kind"
+          @change="
+            updateProvider(activeProvider.id, {
+              kind: ($event.currentTarget as HTMLSelectElement).value as AiProviderKind,
             })
           "
-        />
+        >
+          <option value="openaiCompatible">OpenAI-compatible</option>
+          <option value="claude">Claude</option>
+        </select>
 
-        <label class="settings-label" :for="`${provider.id}-base`">Base URL</label>
-        <input
-          :id="`${provider.id}-base`"
-          class="settings-input"
-          :value="provider.baseUrl"
-          @input="
-            updateProvider(provider.id, {
-              baseUrl: ($event.currentTarget as HTMLInputElement).value,
-            })
-          "
-        />
+        <div class="ai-provider-field-grid">
+          <label>
+            <span class="settings-label">Display name</span>
+            <input
+              :id="`${activeProvider.id}-name`"
+              class="settings-input"
+              :value="activeProvider.name"
+              placeholder="Opencode"
+              @input="
+                updateProvider(activeProvider.id, {
+                  name: ($event.currentTarget as HTMLInputElement).value,
+                })
+              "
+            />
+          </label>
 
-        <label class="settings-label" :for="`${provider.id}-model`">Model</label>
-        <input
-          :id="`${provider.id}-model`"
-          class="settings-input"
-          :value="provider.model"
-          @input="
-            updateProvider(provider.id, {
-              model: ($event.currentTarget as HTMLInputElement).value,
-            })
-          "
-        />
+          <label>
+            <span class="settings-label">Model</span>
+            <input
+              :id="`${activeProvider.id}-model`"
+              class="settings-input"
+              :value="activeProvider.model"
+              placeholder="deepseek-v4-flash"
+              @input="
+                updateProvider(activeProvider.id, {
+                  model: ($event.currentTarget as HTMLInputElement).value,
+                })
+              "
+            />
+          </label>
+        </div>
 
-        <label class="settings-label" :for="`${provider.id}-reasoning`">Reasoning</label>
-        <input
-          :id="`${provider.id}-reasoning`"
-          class="settings-input"
-          :value="provider.reasoning"
-          placeholder="Optional; OpenAI effort or Claude token budget"
-          @input="
-            updateProvider(provider.id, {
-              reasoning: ($event.currentTarget as HTMLInputElement).value,
-            })
-          "
-        />
-
-        <label class="settings-label" :for="`${provider.id}-key`">
-          API key
-          <Check v-if="provider.hasApiKey" :size="13" aria-hidden="true" />
-        </label>
-        <div class="api-key-row">
+        <label>
+          <span class="settings-label">Base URL</span>
           <input
-            :id="`${provider.id}-key`"
+            :id="`${activeProvider.id}-base`"
             class="settings-input"
-            type="password"
-            :value="provider.apiKey"
-            :placeholder="provider.hasApiKey ? 'Stored in settings JSON' : 'Paste API key'"
+            :value="activeProvider.baseUrl"
+            placeholder="https://example.com/v1"
             @input="
-              updateProvider(provider.id, {
-                apiKey: ($event.currentTarget as HTMLInputElement).value,
-                hasApiKey: Boolean(($event.currentTarget as HTMLInputElement).value.trim()),
+              updateProvider(activeProvider.id, {
+                baseUrl: ($event.currentTarget as HTMLInputElement).value,
               })
             "
           />
-          <button
-            type="button"
-            class="icon-button"
-            title="Save API key to settings JSON"
-            @click="saveApiKey(provider.id)"
-          >
-            <KeyRound :size="14" aria-hidden="true" />
-          </button>
-        </div>
+        </label>
+
+        <label>
+          <span class="settings-label">Reasoning</span>
+          <input
+            :id="`${activeProvider.id}-reasoning`"
+            class="settings-input"
+            :value="activeProvider.reasoning"
+            placeholder="Optional; OpenAI effort or Claude token budget"
+            @input="
+              updateProvider(activeProvider.id, {
+                reasoning: ($event.currentTarget as HTMLInputElement).value,
+              })
+            "
+          />
+        </label>
+
+        <label>
+          <span class="settings-label">
+            API key
+            <Check v-if="activeProvider.hasApiKey" :size="13" aria-hidden="true" />
+          </span>
+          <div class="api-key-row">
+            <input
+              :id="`${activeProvider.id}-key`"
+              class="settings-input"
+              type="password"
+              :value="activeProvider.apiKey"
+              :placeholder="activeProvider.hasApiKey ? 'Stored in settings JSON' : 'Paste API key'"
+              @input="
+                updateProvider(activeProvider.id, {
+                  apiKey: ($event.currentTarget as HTMLInputElement).value,
+                  hasApiKey: Boolean(($event.currentTarget as HTMLInputElement).value.trim()),
+                })
+              "
+            />
+            <button
+              type="button"
+              class="secondary-button secondary-button--compact"
+              title="Save API key to settings JSON"
+              @click="saveApiKey(activeProvider.id)"
+            >
+              <KeyRound :size="14" aria-hidden="true" />
+              Save key
+            </button>
+          </div>
+        </label>
 
         <div class="ai-provider-editor__footer">
-          <button type="button" class="secondary-button" @click="testProvider(provider.id)">
+          <span class="ai-provider-status" :title="providerHealthLabel(activeProvider)">
+            Status: {{ providerHealthLabel(activeProvider) }}
+          </span>
+          <button
+            type="button"
+            class="secondary-button"
+            @click="testProvider(activeProvider.id)"
+          >
             Test
           </button>
-          <span v-if="status[provider.id]" :title="status[provider.id]">
-            {{ status[provider.id] }}
-          </span>
         </div>
       </section>
-    </div>
+    </template>
+    <p v-else class="settings-empty">Add a provider, then paste its host, model, and API key.</p>
   </section>
 </template>

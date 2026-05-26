@@ -18,6 +18,14 @@ export function useAppLifecycle(store: ReturnType<typeof useAppStore>): void {
     void store.initialize();
 
     const handleFindShortcut = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !event.isComposing) {
+        if (store.closeTopmostPanel()) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+        return;
+      }
+
       if (!store.document || event.altKey || event.shiftKey) {
         return;
       }

@@ -132,6 +132,10 @@ beforeEach(() => {
       ];
     }
 
+    if (command === "start_ai_chat") {
+      return "run-1";
+    }
+
     return null;
   });
 });
@@ -182,5 +186,44 @@ describe("App AI prompt performance", () => {
 
     await user.click(aiButton);
     expect(screen.queryByRole("complementary", { name: "AI chat" })).not.toBeInTheDocument();
+  });
+
+  it("clears the AI prompt after sending with Enter", async () => {
+    const user = userEvent.setup();
+
+    renderApp();
+
+    await screen.findByTestId("markdown-view");
+    await user.click(screen.getByRole("button", { name: "Ask AI" }));
+
+    const prompt = screen.getByRole("textbox", { name: "Ask AI" });
+    await user.type(prompt, "summarize this{Enter}");
+
+    await waitFor(() => {
+      expect(prompt).toHaveValue("");
+    });
+    expect(mocks.invoke).toHaveBeenCalledWith("start_ai_chat", {
+      request: expect.objectContaining({
+        prompt: "summarize this",
+      }),
+    });
+  });
+
+  it("closes open panels with Escape", async () => {
+    const user = userEvent.setup();
+
+    renderApp();
+
+    await screen.findByTestId("markdown-view");
+
+    await user.click(screen.getByRole("button", { name: "Ask AI" }));
+    expect(screen.getByRole("complementary", { name: "AI chat" })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("complementary", { name: "AI chat" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Open settings" }));
+    expect(screen.getByRole("complementary", { name: "Settings" })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("complementary", { name: "Settings" })).not.toBeInTheDocument();
   });
 });

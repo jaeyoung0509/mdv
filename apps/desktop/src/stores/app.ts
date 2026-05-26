@@ -482,6 +482,30 @@ export const useAppStore = defineStore("app", () => {
     settingsOpen.value = false;
   }
 
+  function closeTopmostPanel(): boolean {
+    if (findOpen.value) {
+      findOpen.value = false;
+      return true;
+    }
+
+    if (aiPanelOpen.value) {
+      aiPanelOpen.value = false;
+      return true;
+    }
+
+    if (settingsOpen.value) {
+      settingsOpen.value = false;
+      return true;
+    }
+
+    if (document.value && !error.value && preferences.value.outlineVisible) {
+      changePreferences({ outlineVisible: false });
+      return true;
+    }
+
+    return false;
+  }
+
   async function initialize() {
     if (!isTauriRuntime()) {
       loading.value = false;
@@ -636,6 +660,7 @@ export const useAppStore = defineStore("app", () => {
     closeAiPanel,
     openSettingsPanel,
     closeSettingsPanel,
+    closeTopmostPanel,
     reloadDocument,
     handleAiStream,
     handleAiComplete,
