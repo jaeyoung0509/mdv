@@ -16,7 +16,6 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 base64 = "0.22"
 futures-util = "0.3"
-keyring = "3"
 mime_guess = "2"
 notify = "8"
 open = "5"

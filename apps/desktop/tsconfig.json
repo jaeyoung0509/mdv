@@ -14,8 +14,8 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
-    "jsx": "react-jsx"
+    "types": ["vitest/globals", "node"]
   },
-  "include": ["src"],
+  "include": ["src", "nuxt.config.ts", "vitest.config.ts", ".nuxt/nuxt.d.ts"],
   "references": []
 }

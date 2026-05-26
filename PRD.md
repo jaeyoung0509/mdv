@@ -93,7 +93,7 @@ Behavior:
 1. The CLI resolves `lecture.md` to an absolute path.
 2. The Tauri app launches.
 3. The Rust backend reads the file.
-4. The React frontend renders the Markdown.
+4. The Nuxt/Vue frontend renders the Markdown.
 5. File changes trigger an automatic reload.
 
 Directory command:
@@ -196,14 +196,19 @@ $$
 
 Final rendering stack:
 
-- `react-markdown`
+- Nuxt + Vue 3
+- Pinia
+- `unified`
+- `remark-parse`
 - `remark-gfm`
 - `remark-frontmatter`
 - `remark-math`
+- `remark-rehype`
 - `rehype-katex`
 - `rehype-slug`
 - `rehype-autolink-headings`
 - `rehype-sanitize`
+- `rehype-stringify`
 - Shiki
 - Mermaid
 - `github-markdown-css` plus custom CSS
@@ -213,22 +218,22 @@ Rendering flow:
 ```text
 .md file
 -> Rust reads file
--> React receives raw Markdown
--> react-markdown parses Markdown
+-> Nuxt/Vue receives raw Markdown
+-> unified parses Markdown
 -> remark-gfm handles GitHub-flavored Markdown
 -> remark-math handles math syntax
 -> rehype-katex renders math
 -> rehype-slug adds heading ids
 -> rehype-autolink-headings adds heading anchors
--> custom code renderer handles Mermaid and Shiki
--> sanitized React output
+-> Vue DOM enhancement handles Mermaid, Shiki, local images, and heading bookmarks
+-> sanitized HTML output
 ```
 
 Reasons:
 
 - Use a proven Markdown ecosystem.
 - Keep AST-based extension easy.
-- Make React component overrides straightforward.
+- Keep Vue components focused on state, events, and DOM enhancement.
 - Safely customize special blocks such as Mermaid, Shiki, and KaTeX.
 
 ## 9. Mermaid Support
@@ -550,15 +555,19 @@ Final stack:
 
 - Tauri v2
 - Rust backend
-- React + TypeScript frontend
-- `react-markdown`
+- Nuxt + Vue 3 + TypeScript frontend
+- Pinia
+- `unified`
+- `remark-parse`
 - `remark-gfm`
 - `remark-frontmatter`
 - `remark-math`
+- `remark-rehype`
 - `rehype-katex`
 - `rehype-slug`
 - `rehype-autolink-headings`
 - `rehype-sanitize`
+- `rehype-stringify`
 - Shiki
 - Mermaid
 - `github-markdown-css`
@@ -576,7 +585,7 @@ launch Tauri desktop app with path argument
   |
 Rust backend reads file
   |
-React frontend renders Markdown
+Nuxt/Vue frontend renders Markdown
   |
 file watcher emits update event
   |
@@ -591,21 +600,29 @@ Recommended structure:
 mdv/
 ├── apps/
 │   └── desktop/
+│       ├── nuxt.config.ts
 │       ├── src/
-│       │   ├── App.tsx
+│       │   ├── app.vue
 │       │   ├── components/
-│       │   │   ├── MarkdownView.tsx
-│       │   │   ├── MermaidBlock.tsx
-│       │   │   ├── CodeBlock.tsx
-│       │   │   ├── TopBar.tsx
-│       │   │   ├── EmptyState.tsx
-│       │   │   └── ErrorState.tsx
+│       │   │   ├── AiPanel.vue
+│       │   │   ├── MarkdownView.vue
+│       │   │   ├── TopBar.vue
+│       │   │   ├── SettingsPanel.vue
+│       │   │   ├── OutlinePanel.vue
+│       │   │   ├── EmptyState.vue
+│       │   │   └── ErrorState.vue
+│       │   ├── composables/
+│       │   │   ├── useAppLifecycle.ts
+│       │   │   ├── useTauriRuntime.ts
+│       │   │   └── useThemeSync.ts
 │       │   ├── lib/
 │       │   │   ├── markdown.ts
-│       │   │   ├── mermaid.ts
+│       │   │   ├── readerSettings.ts
 │       │   │   ├── shiki.ts
 │       │   │   ├── theme.ts
-│       │   │   └── file.ts
+│       │   │   └── types.ts
+│       │   ├── stores/
+│       │   │   └── app.ts
 │       │   └── styles/
 │       │       ├── app.css
 │       │       └── markdown.css
@@ -654,7 +671,7 @@ Required commands:
 
 ## 19. Frontend Responsibilities
 
-The React frontend handles:
+The Nuxt/Vue frontend handles:
 
 - Markdown rendering
 - Mermaid rendering
@@ -670,11 +687,12 @@ The React frontend handles:
 Core components:
 
 - `App`
+- `AiPanel`
 - `TopBar`
 - `MarkdownView`
-- `CodeBlock`
-- `MermaidBlock`
-- `ImageRenderer`
+- `SettingsPanel`
+- `OutlinePanel`
+- `FindPanel`
 - `EmptyState`
 - `ErrorState`
 

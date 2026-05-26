@@ -104,6 +104,7 @@ function normalizeAiProvider(provider: Partial<AiProvider>, index: number): AiPr
   const baseUrl = String(provider.baseUrl || "").trim();
   const model = String(provider.model || "").trim();
   const reasoning = String(provider.reasoning || "").trim();
+  const apiKey = String(provider.apiKey || "").trim();
 
   if (!id || !name) {
     return null;
@@ -116,7 +117,8 @@ function normalizeAiProvider(provider: Partial<AiProvider>, index: number): AiPr
     baseUrl,
     model,
     reasoning,
-    hasApiKey: Boolean(provider.hasApiKey),
+    apiKey,
+    hasApiKey: Boolean(apiKey),
   };
 }
 

@@ -3,9 +3,9 @@ mod watcher;
 
 use commands::{
     cancel_ai_chat, delete_ai_provider, get_ai_settings, get_file_metadata, get_initial_state,
-    initialize_state, open_document, open_external_url, pick_markdown_file, read_markdown,
-    reload_document, resolve_image_src, resolve_input_path, save_ai_provider,
-    save_reader_preferences, save_theme_preference, set_ai_api_key, start_ai_chat,
+    initialize_state, list_directory_documents, open_document, open_external_url,
+    pick_markdown_file, read_markdown, reload_document, resolve_image_src, resolve_input_path,
+    save_ai_provider, save_reader_preferences, save_theme_preference, start_ai_chat,
     test_ai_provider, watch_file, SharedState,
 };
 
@@ -22,6 +22,7 @@ pub fn run() {
             resolve_input_path,
             open_document,
             pick_markdown_file,
+            list_directory_documents,
             get_file_metadata,
             watch_file,
             save_reader_preferences,
@@ -29,7 +30,6 @@ pub fn run() {
             get_ai_settings,
             save_ai_provider,
             delete_ai_provider,
-            set_ai_api_key,
             test_ai_provider,
             start_ai_chat,
             cancel_ai_chat

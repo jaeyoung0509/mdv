@@ -1,5 +1,7 @@
 node_modules/
 dist/
+.nuxt/
+.output/
 target/
 apps/desktop/src-tauri/gen/
 .DS_Store

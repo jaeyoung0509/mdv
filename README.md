@@ -15,8 +15,8 @@ mdv .
 This repository is the v0.1 implementation scaffold:
 
 - Tauri v2 desktop app with a Rust backend
-- React + TypeScript frontend
-- GitHub-flavored Markdown through `react-markdown`, `remark-gfm`, and `github-markdown-css`
+- Nuxt + Vue 3 + Pinia TypeScript frontend
+- GitHub-flavored Markdown through `unified`, `remark-gfm`, and `github-markdown-css`
 - Mermaid diagrams
 - KaTeX math
 - Shiki code highlighting

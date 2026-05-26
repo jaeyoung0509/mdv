@@ -42,6 +42,8 @@ export interface AiProvider {
   baseUrl: string;
   model: string;
   reasoning: string;
+  // TODO: Move API keys back to OS secure storage once desktop keychain persistence is reliable.
+  apiKey: string;
   hasApiKey: boolean;
 }
 
@@ -91,6 +93,12 @@ export interface DocumentPayload {
   directory: string;
   content: string;
   watching: boolean;
+}
+
+export interface DirectoryDocument {
+  path: string;
+  fileName: string;
+  directory: string;
 }
 
 export interface MdvError {

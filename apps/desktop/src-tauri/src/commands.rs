@@ -99,6 +99,14 @@ pub struct FileMetadata {
     modified_millis: Option<u128>,
 }
 
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DirectoryDocument {
+    path: String,
+    file_name: String,
+    directory: String,
+}
+
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReaderBookmark {
@@ -158,6 +166,9 @@ pub struct AiProvider {
     model: String,
     #[serde(default)]
     reasoning: String,
+    // TODO: Move API keys back to OS secure storage once desktop keychain persistence is reliable.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    api_key: String,
     #[serde(default)]
     has_api_key: bool,
 }
@@ -387,6 +398,41 @@ pub fn get_file_metadata(path: String) -> Result<FileMetadata, MdvError> {
 }
 
 #[tauri::command]
+pub fn list_directory_documents(directory: String) -> Result<Vec<DirectoryDocument>, MdvError> {
+    let directory_path = PathBuf::from(&directory);
+    let canonical_directory = directory_path
+        .canonicalize()
+        .map_err(|error| read_error(&directory_path, error))?;
+    let metadata = fs::metadata(&canonical_directory)
+        .map_err(|error| read_error(&canonical_directory, error))?;
+
+    if !metadata.is_dir() {
+        return Err(MdvError::new(
+            "InvalidDirectory",
+            "Document switcher can only browse directories.",
+        )
+        .with_path(canonical_directory.display().to_string()));
+    }
+
+    let mut documents = fs::read_dir(&canonical_directory)
+        .map_err(|error| read_error(&canonical_directory, error))?
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| path.is_file() && is_markdown_path(path))
+        .filter_map(|path| directory_document_for_path(&path).ok())
+        .collect::<Vec<_>>();
+
+    documents.sort_by(|a, b| {
+        a.file_name
+            .to_lowercase()
+            .cmp(&b.file_name.to_lowercase())
+            .then_with(|| a.file_name.cmp(&b.file_name))
+    });
+
+    Ok(documents)
+}
+
+#[tauri::command]
 pub fn watch_file(
     app: AppHandle,
     state: State<'_, SharedState>,
@@ -528,7 +574,7 @@ pub fn save_ai_provider(
     provider: AiProvider,
     state: State<'_, SharedState>,
 ) -> Result<AiSettings, MdvError> {
-    let provider = normalize_ai_provider(provider, 0)
+    let mut provider = normalize_ai_provider(provider, 0)
         .ok_or_else(|| MdvError::new("InvalidAiProvider", "AI provider settings are invalid."))?;
 
     let mut preferences = {
@@ -539,6 +585,10 @@ pub fn save_ai_provider(
     let mut updated = false;
     for existing in preferences.ai.providers.iter_mut() {
         if existing.id == provider.id {
+            if provider.api_key.is_empty() {
+                provider.api_key = existing.api_key.clone();
+                provider.has_api_key = !provider.api_key.trim().is_empty();
+            }
             *existing = provider.clone();
             updated = true;
             break;
@@ -589,7 +639,6 @@ pub fn delete_ai_provider(
             .unwrap_or_default();
     }
 
-    let _ = delete_ai_api_key_from_keychain(&provider_id);
     preferences = normalize_reader_preferences(preferences);
     save_preferences(&preferences)?;
 
@@ -601,43 +650,12 @@ pub fn delete_ai_provider(
 }
 
 #[tauri::command]
-pub fn set_ai_api_key(
-    provider_id: String,
-    api_key: String,
-    state: State<'_, SharedState>,
-) -> Result<AiSettings, MdvError> {
-    let settings = {
-        let inner = state.inner.lock().expect("runtime state poisoned");
-        inner.config.preferences.ai.clone()
-    };
-
-    if !settings
-        .providers
-        .iter()
-        .any(|provider| provider.id == provider_id)
-    {
-        return Err(MdvError::new(
-            "AiProviderNotFound",
-            "Could not find this AI provider.",
-        ));
-    }
-
-    if api_key.trim().is_empty() {
-        delete_ai_api_key_from_keychain(&provider_id)?;
-    } else {
-        save_ai_api_key_to_keychain(&provider_id, api_key.trim())?;
-    }
-
-    Ok(with_ai_key_presence(settings))
-}
-
-#[tauri::command]
 pub async fn test_ai_provider(
     provider_id: String,
     state: State<'_, SharedState>,
 ) -> Result<(), MdvError> {
     let provider = get_ai_provider(&state, &provider_id)?;
-    let api_key = load_ai_api_key_from_keychain(&provider.id)?;
+    let api_key = load_ai_api_key_from_provider(&provider)?;
     validate_ai_provider_config(&provider)?;
     test_ai_provider_request(&provider, &api_key).await
 }
@@ -649,7 +667,7 @@ pub fn start_ai_chat(
     request: AiChatRequest,
 ) -> Result<String, MdvError> {
     let provider = get_ai_provider(&state, &request.provider_id)?;
-    let api_key = load_ai_api_key_from_keychain(&provider.id)?;
+    let api_key = load_ai_api_key_from_provider(&provider)?;
     validate_ai_provider_config(&provider)?;
 
     if request.prompt.trim().is_empty() {
@@ -719,7 +737,7 @@ pub fn cancel_ai_chat(run_id: String, state: State<'_, SharedState>) -> bool {
 
 fn with_ai_key_presence(mut settings: AiSettings) -> AiSettings {
     for provider in settings.providers.iter_mut() {
-        provider.has_api_key = has_ai_api_key(&provider.id);
+        provider.has_api_key = !provider.api_key.trim().is_empty();
     }
 
     settings
@@ -741,33 +759,8 @@ fn get_ai_provider(
         .ok_or_else(|| MdvError::new("AiProviderNotFound", "Could not find this AI provider."))
 }
 
-fn ai_keychain_entry(provider_id: &str) -> Result<keyring::Entry, MdvError> {
-    keyring::Entry::new("mdv", &format!("ai:{provider_id}")).map_err(|error| {
-        MdvError::new("AiKeychainError", "Could not access the OS keychain.")
-            .with_details(error.to_string())
-    })
-}
-
-fn save_ai_api_key_to_keychain(provider_id: &str, api_key: &str) -> Result<(), MdvError> {
-    ai_keychain_entry(provider_id)?
-        .set_password(api_key)
-        .map_err(|error| {
-            MdvError::new("AiKeychainError", "Could not save this API key.")
-                .with_details(error.to_string())
-        })
-}
-
-fn load_ai_api_key_from_keychain(provider_id: &str) -> Result<String, MdvError> {
-    let api_key = ai_keychain_entry(provider_id)?
-        .get_password()
-        .map_err(|error| {
-            MdvError::new(
-                "AiApiKeyMissing",
-                "Add an API key for this AI provider first.",
-            )
-            .with_details(error.to_string())
-        })?;
-
+fn load_ai_api_key_from_provider(provider: &AiProvider) -> Result<String, MdvError> {
+    let api_key = provider.api_key.trim().to_string();
     if api_key.trim().is_empty() {
         return Err(MdvError::new(
             "AiApiKeyMissing",
@@ -776,32 +769,6 @@ fn load_ai_api_key_from_keychain(provider_id: &str) -> Result<String, MdvError> 
     }
 
     Ok(api_key)
-}
-
-fn delete_ai_api_key_from_keychain(provider_id: &str) -> Result<(), MdvError> {
-    let entry = ai_keychain_entry(provider_id)?;
-    match entry.delete_credential() {
-        Ok(()) => Ok(()),
-        Err(error) => {
-            let message = error.to_string();
-            if message.to_lowercase().contains("no entry")
-                || message.to_lowercase().contains("not found")
-            {
-                return Ok(());
-            }
-
-            Err(
-                MdvError::new("AiKeychainError", "Could not delete this API key.")
-                    .with_details(message),
-            )
-        }
-    }
-}
-
-fn has_ai_api_key(provider_id: &str) -> bool {
-    load_ai_api_key_from_keychain(provider_id)
-        .map(|api_key| !api_key.trim().is_empty())
-        .unwrap_or(false)
 }
 
 fn validate_ai_provider_config(provider: &AiProvider) -> Result<(), MdvError> {
@@ -1401,7 +1368,8 @@ fn normalize_ai_provider(mut provider: AiProvider, index: usize) -> Option<AiPro
         provider.model.trim().to_string()
     };
     provider.reasoning = provider.reasoning.trim().to_string();
-    provider.has_api_key = false;
+    provider.api_key = provider.api_key.trim().to_string();
+    provider.has_api_key = !provider.api_key.is_empty();
 
     if provider.id.is_empty() || provider.name.is_empty() {
         return None;
@@ -1606,6 +1574,16 @@ fn metadata_for_path(path: &Path) -> Result<FileMetadata, MdvError> {
     })
 }
 
+fn directory_document_for_path(path: &Path) -> Result<DirectoryDocument, MdvError> {
+    let metadata = metadata_for_path(path)?;
+
+    Ok(DirectoryDocument {
+        path: metadata.path,
+        file_name: metadata.file_name,
+        directory: metadata.directory,
+    })
+}
+
 fn is_markdown_path(path: &Path) -> bool {
     path.extension()
         .and_then(|extension| extension.to_str())
@@ -1723,6 +1701,7 @@ mod tests {
             base_url: "https://example.com/v1/".to_string(),
             model: "model".to_string(),
             reasoning: String::new(),
+            api_key: String::new(),
             has_api_key: false,
         };
         let claude = AiProvider {
@@ -1732,6 +1711,7 @@ mod tests {
             base_url: "https://api.anthropic.com/v1".to_string(),
             model: "model".to_string(),
             reasoning: String::new(),
+            api_key: String::new(),
             has_api_key: false,
         };
 
