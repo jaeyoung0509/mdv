@@ -92,6 +92,7 @@ function enhanceHeadings() {
     }
 
     const label = getHeadingText(element) || "Heading";
+    element.classList.add("bookmarkable-heading");
     let button = Array.from(element.children).find((child) =>
       child.classList.contains("bookmark-ribbon"),
     ) as HTMLButtonElement | undefined;

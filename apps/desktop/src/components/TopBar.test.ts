@@ -11,6 +11,7 @@ const currentDocument: DocumentPayload = {
   directory: "/Users/apple/project",
   content: "# Quiz",
   watching: true,
+  modifiedMillis: 10,
 };
 
 const directoryDocuments: DirectoryDocument[] = [
@@ -35,15 +36,21 @@ function renderTopBar(overrides: Partial<InstanceType<typeof TopBar>["$props"]> 
     aiPanelOpen: false,
     findOpen: false,
     directoryDocuments,
+    editorMode: "read" as const,
+    saveStatus: "idle" as const,
+    wordCount: 0,
+    selectedWordCount: 0,
     ...overrides,
   };
   const handlers = {
     onBookmarkAdd: vi.fn(),
     onAiToggle: vi.fn(),
     onDocumentOpen: vi.fn(),
+    onEditorModeChange: vi.fn(),
     onFindToggle: vi.fn(),
     onOpenFile: vi.fn(),
     onOutlineToggle: vi.fn(),
+    onSave: vi.fn(),
     onSettingsToggle: vi.fn(),
   };
 
@@ -74,5 +81,37 @@ describe("TopBar document switcher", () => {
     await user.click(within(menu).getByRole("menuitem", { name: "notes.md" }));
 
     expect(handlers.onDocumentOpen).toHaveBeenCalledWith("/Users/apple/project/notes.md");
+  });
+});
+
+describe("TopBar writing controls", () => {
+  it("switches between read and write modes", async () => {
+    const user = userEvent.setup();
+    const handlers = renderTopBar();
+
+    await user.click(screen.getByRole("button", { name: "Write" }));
+
+    expect(handlers.onEditorModeChange).toHaveBeenCalledWith("write");
+  });
+
+  it("emits save from the save button in write mode", async () => {
+    const user = userEvent.setup();
+    const handlers = renderTopBar({ editorMode: "write", saveStatus: "dirty" });
+
+    await user.click(screen.getByRole("button", { name: "Save document" }));
+
+    expect(handlers.onSave).toHaveBeenCalled();
+  });
+
+  it("shows compact writing save and word status", () => {
+    renderTopBar({
+      editorMode: "write",
+      saveStatus: "dirty",
+      wordCount: 12,
+      selectedWordCount: 3,
+    });
+
+    expect(screen.getByText("Unsaved")).toBeInTheDocument();
+    expect(screen.getByText("3 selected / 12 words")).toBeInTheDocument();
   });
 });

@@ -65,7 +65,6 @@ Goals:
 
 Non-goals for the initial version:
 
-- Markdown editor
 - Vault system
 - Backlinks
 - Graph view

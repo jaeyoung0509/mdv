@@ -8,7 +8,7 @@ mdv README.md
 mdv .
 ```
 
-`mdv` opens a Markdown file or directory in a lightweight Tauri desktop viewer. It is viewer-only: no vault setup, no account, no editing surface, and no knowledge-management system.
+`mdv` opens a Markdown file or directory in a lightweight Tauri desktop app. It stays read-first, with an optional Markdown writing mode for the current file: no vault setup, no account, and no knowledge-management system.
 
 ## Status
 
@@ -21,6 +21,7 @@ This repository is the v0.1 implementation scaffold:
 - KaTeX math
 - Shiki code highlighting
 - File watching and auto reload
+- Optional rich Markdown writing mode with manual save and debounced autosave
 - npm CLI wrapper that exposes the `mdv` command
 
 ## Development

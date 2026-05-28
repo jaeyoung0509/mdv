@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import {
+  AlertTriangle,
   BookmarkPlus,
+  BookOpen,
   ChevronDown,
   Check,
   Copy,
@@ -8,12 +10,14 @@ import {
   Folder,
   FolderOpen,
   ListTree,
+  PenLine,
+  Save,
   Search,
   Settings,
   Sparkles,
 } from "@lucide/vue";
-import { onBeforeUnmount, ref, watch as vueWatch } from "vue";
-import type { DirectoryDocument, DocumentPayload } from "../lib/types";
+import { computed, onBeforeUnmount, ref, watch as vueWatch } from "vue";
+import type { DirectoryDocument, DocumentPayload, EditorMode, SaveStatus } from "../lib/types";
 
 const props = withDefaults(
   defineProps<{
@@ -24,12 +28,20 @@ const props = withDefaults(
     aiPanelOpen?: boolean;
     findOpen?: boolean;
     directoryDocuments?: DirectoryDocument[];
+    editorMode?: EditorMode;
+    saveStatus?: SaveStatus;
+    wordCount?: number;
+    selectedWordCount?: number;
   }>(),
   {
     opening: false,
     aiPanelOpen: false,
     findOpen: false,
     directoryDocuments: () => [],
+    editorMode: "read",
+    saveStatus: "idle",
+    wordCount: 0,
+    selectedWordCount: 0,
   },
 );
 
@@ -37,14 +49,48 @@ const emit = defineEmits<{
   bookmarkAdd: [];
   aiToggle: [];
   documentOpen: [path: string];
+  editorModeChange: [mode: EditorMode];
   findToggle: [];
   openFile: [];
   outlineToggle: [];
+  save: [];
   settingsToggle: [];
 }>();
 
 const documentMenuOpen = ref(false);
 const titleRef = ref<HTMLElement | null>(null);
+const saveStatusLabel = computed(() => {
+  if (props.saveStatus === "dirty") {
+    return "Unsaved";
+  }
+
+  if (props.saveStatus === "saving") {
+    return "Saving";
+  }
+
+  if (props.saveStatus === "saved") {
+    return "Saved";
+  }
+
+  if (props.saveStatus === "conflict") {
+    return "Conflict";
+  }
+
+  if (props.saveStatus === "error") {
+    return "Save failed";
+  }
+
+  return "Ready";
+});
+const writingStatsLabel = computed(() => {
+  const words = `${props.wordCount} ${props.wordCount === 1 ? "word" : "words"}`;
+
+  if (props.selectedWordCount > 0) {
+    return `${props.selectedWordCount} selected / ${words}`;
+  }
+
+  return words;
+});
 
 async function copyPath() {
   if (!props.document) {
@@ -172,6 +218,50 @@ onBeforeUnmount(() => {
       <span class="watch-status">
         <Check v-if="watch && document?.watching" :size="14" aria-hidden="true" />
         {{ watch && document?.watching ? "Watching" : "Static" }}
+      </span>
+
+      <div class="mode-switcher" role="group" aria-label="Editor mode">
+        <button
+          type="button"
+          :aria-pressed="editorMode === 'read'"
+          :disabled="!document"
+          title="Read mode"
+          @click="emit('editorModeChange', 'read')"
+        >
+          <BookOpen :size="14" aria-hidden="true" />
+          <span>Read</span>
+        </button>
+        <button
+          type="button"
+          :aria-pressed="editorMode === 'write'"
+          :disabled="!document"
+          title="Write mode"
+          @click="emit('editorModeChange', 'write')"
+        >
+          <PenLine :size="14" aria-hidden="true" />
+          <span>Write</span>
+        </button>
+      </div>
+
+      <button
+        type="button"
+        class="icon-button"
+        title="Save document"
+        :disabled="!document || editorMode !== 'write' || saveStatus === 'saving'"
+        @click="emit('save')"
+      >
+        <Save :size="15" aria-hidden="true" />
+      </button>
+
+      <span v-if="editorMode === 'write'" class="save-status" :data-status="saveStatus">
+        <AlertTriangle
+          v-if="saveStatus === 'conflict' || saveStatus === 'error'"
+          :size="13"
+          aria-hidden="true"
+        />
+        <span v-else class="save-status__dot" aria-hidden="true" />
+        <span>{{ saveStatusLabel }}</span>
+        <span class="save-status__stats">{{ writingStatsLabel }}</span>
       </span>
 
       <button

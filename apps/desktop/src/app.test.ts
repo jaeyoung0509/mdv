@@ -1,10 +1,12 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/vue";
 import userEvent from "@testing-library/user-event";
-import { createPinia } from "pinia";
+import { createPinia, setActivePinia } from "pinia";
 import { defineComponent, h } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./app.vue";
+import { useAppStore } from "./stores/app";
+import { AUTOSAVE_DELAY_MS } from "./stores/slices/writing";
 
 const mocks = vi.hoisted(() => ({
   invoke: vi.fn(),
@@ -37,6 +39,120 @@ vi.mock("./components/MarkdownView.vue", () => ({
   }),
 }));
 
+vi.mock("./components/MarkdownEditor.vue", () => ({
+  __esModule: true,
+  default: defineComponent({
+    name: "MarkdownEditor",
+    props: {
+      content: {
+        type: String,
+        required: true,
+      },
+      error: {
+        type: String,
+        default: null,
+      },
+      saveStatus: {
+        type: String,
+        required: true,
+      },
+      surfaceMode: {
+        type: String,
+        required: true,
+      },
+      focusMode: {
+        type: Boolean,
+        required: true,
+      },
+      typewriterMode: {
+        type: Boolean,
+        required: true,
+      },
+    },
+    emits: [
+      "contentChange",
+      "focusModeChange",
+      "overwrite",
+      "reload",
+      "save",
+      "selectionChange",
+      "surfaceModeChange",
+      "typewriterModeChange",
+    ],
+    setup(props, { emit }) {
+      return () =>
+        h("section", { "aria-label": "Markdown editor" }, [
+          h(
+            "button",
+            {
+              type: "button",
+              onClick: () => emit("surfaceModeChange", "live"),
+            },
+            "Live",
+          ),
+          h(
+            "button",
+            {
+              type: "button",
+              onClick: () => emit("surfaceModeChange", "source"),
+            },
+            "Source",
+          ),
+          h(
+            "button",
+            {
+              type: "button",
+              onClick: () => emit("focusModeChange", !props.focusMode),
+            },
+            "Focus",
+          ),
+          h(
+            "button",
+            {
+              type: "button",
+              onClick: () => emit("typewriterModeChange", !props.typewriterMode),
+            },
+            "Typewriter",
+          ),
+          h("textarea", {
+            "aria-label": "Markdown editor",
+            value: props.content,
+            onInput: (event: Event) => {
+              emit("contentChange", (event.target as HTMLTextAreaElement).value);
+            },
+          }),
+          h("span", { "data-testid": "save-status" }, props.saveStatus),
+          h("span", { "data-testid": "surface-mode" }, props.surfaceMode),
+          props.error ? h("span", { role: "alert" }, props.error) : null,
+          h(
+            "button",
+            {
+              type: "button",
+              onClick: () => emit("save"),
+            },
+            "Save",
+          ),
+          h(
+            "button",
+            {
+              type: "button",
+              onClick: () => emit("reload"),
+            },
+            "Reload",
+          ),
+          h(
+            "button",
+            {
+              type: "button",
+              onClick: () => emit("overwrite"),
+            },
+            "Overwrite",
+          ),
+        ]);
+    },
+  }),
+}));
+
 const aiSettings = {
   activeProviderId: "provider-1",
   providers: [
@@ -59,6 +175,7 @@ const initialDocument = {
   directory: "/Users/apple/project",
   content: "# Quiz\n\nA long document body",
   watching: true,
+  modifiedMillis: 10,
 };
 
 const preferences = {
@@ -102,7 +219,7 @@ beforeEach(() => {
   mocks.onDragDropEvent.mockReset();
   mocks.onDragDropEvent.mockResolvedValue(() => undefined);
   mocks.invoke.mockReset();
-  mocks.invoke.mockImplementation(async (command: string) => {
+  mocks.invoke.mockImplementation(async (command: string, args?: Record<string, unknown>) => {
     if (command === "get_initial_state") {
       return {
         preferences,
@@ -134,6 +251,18 @@ beforeEach(() => {
 
     if (command === "start_ai_chat") {
       return "run-1";
+    }
+
+    if (command === "save_document") {
+      return {
+        ...initialDocument,
+        content: String(args?.content ?? initialDocument.content),
+        modifiedMillis: 20,
+      };
+    }
+
+    if (command === "import_document_asset") {
+      return "assets/dropped.png";
     }
 
     return null;
@@ -225,5 +354,155 @@ describe("App AI prompt performance", () => {
     expect(screen.getByRole("complementary", { name: "Settings" })).toBeInTheDocument();
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("complementary", { name: "Settings" })).not.toBeInTheDocument();
+  });
+
+  it("switches into writing mode from the top bar", async () => {
+    const user = userEvent.setup();
+
+    renderApp();
+
+    await screen.findByTestId("markdown-view");
+    await user.click(screen.getByRole("button", { name: "Write" }));
+
+    expect(await screen.findByRole("textbox", { name: "Markdown editor" })).toHaveValue(
+      initialDocument.content,
+    );
+  });
+
+  it("saves edited Markdown manually", async () => {
+    const user = userEvent.setup();
+
+    renderApp();
+
+    await screen.findByTestId("markdown-view");
+    await user.click(screen.getByRole("button", { name: "Write" }));
+    const editor = await screen.findByRole("textbox", { name: "Markdown editor" });
+
+    await user.clear(editor);
+    await user.type(editor, "# Updated");
+    await user.click(screen.getByRole("button", { name: "Save document" }));
+
+    await waitFor(() => {
+      expect(mocks.invoke).toHaveBeenCalledWith("save_document", {
+        content: "# Updated",
+        expectedModifiedMillis: 10,
+        force: false,
+      });
+    });
+  });
+
+  it("keeps the same draft while switching between live and source writing surfaces", async () => {
+    const user = userEvent.setup();
+
+    renderApp();
+
+    await screen.findByTestId("markdown-view");
+    await user.click(screen.getByRole("button", { name: "Write" }));
+    const editor = await screen.findByRole("textbox", { name: "Markdown editor" });
+
+    await user.clear(editor);
+    await user.type(editor, "# Source draft");
+    await user.click(screen.getByRole("button", { name: "Source" }));
+
+    expect(screen.getByTestId("surface-mode")).toHaveTextContent("source");
+    expect(screen.getByRole("textbox", { name: "Markdown editor" })).toHaveValue(
+      "# Source draft",
+    );
+  });
+
+  it("toggles source mode with Cmd/Ctrl slash while writing", async () => {
+    const user = userEvent.setup();
+
+    renderApp();
+
+    await screen.findByTestId("markdown-view");
+    await user.click(screen.getByRole("button", { name: "Write" }));
+
+    expect(screen.getByTestId("surface-mode")).toHaveTextContent("live");
+
+    await user.keyboard("{Meta>}/{/Meta}");
+
+    expect(screen.getByTestId("surface-mode")).toHaveTextContent("source");
+  });
+});
+
+describe("App writing store", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("autosaves dirty content after the debounce window", async () => {
+    vi.useFakeTimers();
+    setActivePinia(createPinia());
+    const store = useAppStore();
+
+    store.document = initialDocument;
+    store.resetWritingForDocument(initialDocument);
+    store.setEditorMode("write");
+    store.updateDraftContent("# Autosaved");
+
+    expect(mocks.invoke).not.toHaveBeenCalledWith("save_document", expect.anything());
+
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+
+    expect(mocks.invoke).toHaveBeenCalledWith("save_document", {
+      content: "# Autosaved",
+      expectedModifiedMillis: 10,
+      force: false,
+    });
+  });
+
+  it("pauses autosave and reports a conflict when the file changes while dirty", async () => {
+    vi.useFakeTimers();
+    setActivePinia(createPinia());
+    const store = useAppStore();
+
+    store.document = initialDocument;
+    store.resetWritingForDocument(initialDocument);
+    store.setEditorMode("write");
+    store.updateDraftContent("# Local draft");
+    await store.handleExternalDocumentUpdate();
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+
+    expect(store.saveStatus).toBe("conflict");
+    expect(store.saveError).toBe("This file changed on disk after you started editing.");
+    expect(mocks.invoke).not.toHaveBeenCalledWith("reload_document");
+    expect(mocks.invoke).not.toHaveBeenCalledWith("save_document", expect.anything());
+  });
+
+  it("tracks writing surface and focus controls without changing the draft", () => {
+    setActivePinia(createPinia());
+    const store = useAppStore();
+
+    store.document = initialDocument;
+    store.resetWritingForDocument(initialDocument);
+    store.updateDraftContent("# Draft");
+    store.setWritingSurfaceMode("source");
+    store.setFocusMode(true);
+    store.setTypewriterMode(true);
+    store.updateWritingSelection("two words");
+
+    expect(store.writingSurfaceMode).toBe("source");
+    expect(store.focusMode).toBe(true);
+    expect(store.typewriterMode).toBe(true);
+    expect(store.wordCount).toBe(1);
+    expect(store.selectedWordCount).toBe(2);
+    expect(store.draftContent).toBe("# Draft");
+  });
+
+  it("imports dropped images as relative Markdown while writing", async () => {
+    setActivePinia(createPinia());
+    const store = useAppStore();
+
+    store.document = initialDocument;
+    store.resetWritingForDocument(initialDocument);
+
+    await expect(store.insertImageAsset("/Users/apple/Desktop/dropped.png")).resolves.toBe(true);
+
+    expect(mocks.invoke).toHaveBeenCalledWith("import_document_asset", {
+      sourcePath: "/Users/apple/Desktop/dropped.png",
+      documentPath: initialDocument.path,
+    });
+    expect(store.draftContent).toContain("![dropped](assets/dropped.png)");
   });
 });

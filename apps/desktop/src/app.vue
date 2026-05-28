@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { defineAsyncComponent } from "vue";
 import AiPanel from "./components/AiPanel.vue";
 import EmptyState from "./components/EmptyState.vue";
 import ErrorState from "./components/ErrorState.vue";
@@ -13,6 +14,9 @@ import { useThemeSync } from "./composables/useThemeSync";
 import { useAppStore } from "./stores/app";
 
 const store = useAppStore();
+const MarkdownEditor = defineAsyncComponent(() =>
+  import("./components/MarkdownEditor.vue").then((module) => module.default),
+);
 
 useThemeSync(store);
 useAppLifecycle(store);
@@ -28,12 +32,18 @@ useAppLifecycle(store);
       :ai-panel-open="store.aiPanelOpen"
       :find-open="store.findOpen"
       :directory-documents="[]"
+      editor-mode="read"
+      save-status="idle"
+      :word-count="0"
+      :selected-word-count="0"
       @bookmark-add="store.toggleCurrentBookmark"
       @ai-toggle="store.toggleAiPanel"
       @document-open="store.openDocumentPath"
+      @editor-mode-change="store.setEditorMode"
       @find-toggle="store.toggleFind"
       @open-file="store.openFilePicker"
       @outline-toggle="store.toggleOutline"
+      @save="store.saveCurrentDocument"
       @settings-toggle="store.openSettingsPanel"
     />
     <main class="state-view">
@@ -53,12 +63,18 @@ useAppLifecycle(store);
       :ai-panel-open="store.aiPanelOpen"
       :find-open="store.findOpen"
       :directory-documents="store.directoryDocuments"
+      :editor-mode="store.editorMode"
+      :save-status="store.saveStatus"
+      :word-count="store.wordCount"
+      :selected-word-count="store.selectedWordCount"
       @bookmark-add="store.toggleCurrentBookmark"
       @ai-toggle="store.toggleAiPanel"
       @document-open="store.openDocumentPath"
+      @editor-mode-change="store.setEditorMode"
       @find-toggle="store.toggleFind"
       @open-file="store.openFilePicker"
       @outline-toggle="store.toggleOutline"
+      @save="store.saveCurrentDocument"
       @settings-toggle="store.openSettingsPanel"
     />
 
@@ -78,6 +94,7 @@ useAppLifecycle(store);
         @bookmark-select="store.selectBookmark"
       />
       <MarkdownView
+        v-if="store.editorMode === 'read'"
         :document="store.document"
         :allow-html="store.allowHtml"
         :preferences="store.preferences"
@@ -86,6 +103,25 @@ useAppLifecycle(store);
         @headings-change="store.updateHeadings"
         @heading-bookmark-toggle="store.toggleHeadingBookmark"
         @text-selection="store.handleTextSelection"
+      />
+      <MarkdownEditor
+        v-else
+        :content="store.draftContent"
+        :error="store.saveError"
+        :focus-mode="store.focusMode"
+        :preferences="store.preferences"
+        :save-status="store.saveStatus"
+        :surface-mode="store.writingSurfaceMode"
+        :theme="store.effectiveTheme"
+        :typewriter-mode="store.typewriterMode"
+        @content-change="store.updateDraftContent"
+        @focus-mode-change="store.setFocusMode"
+        @overwrite="store.overwriteExternalChanges"
+        @reload="store.reloadWritingDocument"
+        @save="store.saveCurrentDocument"
+        @selection-change="store.updateWritingSelection"
+        @surface-mode-change="store.setWritingSurfaceMode"
+        @typewriter-mode-change="store.setTypewriterMode"
       />
     </div>
 

@@ -17,7 +17,7 @@ export function useAppLifecycle(store: ReturnType<typeof useAppStore>): void {
   onMounted(() => {
     void store.initialize();
 
-    const handleFindShortcut = (event: KeyboardEvent) => {
+    const handleGlobalShortcut = (event: KeyboardEvent) => {
       if (event.key === "Escape" && !event.isComposing) {
         if (store.closeTopmostPanel()) {
           event.preventDefault();
@@ -30,14 +30,30 @@ export function useAppLifecycle(store: ReturnType<typeof useAppStore>): void {
         return;
       }
 
+      if ((event.metaKey || event.ctrlKey) && event.key.toLocaleLowerCase() === "s") {
+        if (store.editorMode === "write") {
+          event.preventDefault();
+          void store.saveCurrentDocument();
+        }
+        return;
+      }
+
+      if ((event.metaKey || event.ctrlKey) && event.key === "/") {
+        if (store.editorMode === "write") {
+          event.preventDefault();
+          store.toggleWritingSurfaceMode();
+        }
+        return;
+      }
+
       if ((event.metaKey || event.ctrlKey) && event.key.toLocaleLowerCase() === "f") {
         event.preventDefault();
         store.openFindPanel();
       }
     };
 
-    window.addEventListener("keydown", handleFindShortcut);
-    disposers.push(() => window.removeEventListener("keydown", handleFindShortcut));
+    window.addEventListener("keydown", handleGlobalShortcut);
+    disposers.push(() => window.removeEventListener("keydown", handleGlobalShortcut));
 
     const clearSelectionChipIfEmpty = () => {
       const selectedText = window.getSelection()?.toString().trim() ?? "";
@@ -72,7 +88,7 @@ export function useAppLifecycle(store: ReturnType<typeof useAppStore>): void {
     }
 
     listen("mdv:file-updated", () => {
-      void store.reloadDocument();
+      void store.handleExternalDocumentUpdate();
     }).then((dispose) => disposers.push(dispose));
 
     listen<AiStreamEvent>("mdv:ai-stream", (event) => {

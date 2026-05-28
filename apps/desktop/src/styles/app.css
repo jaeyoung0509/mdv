@@ -307,6 +307,92 @@ button {
   white-space: nowrap;
 }
 
+.save-status {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 220px;
+  height: 28px;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--app-border);
+  border-radius: 7px;
+  background: var(--app-surface-raised);
+  color: var(--app-muted);
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.save-status[data-status="dirty"],
+.save-status[data-status="saving"] {
+  color: var(--app-accent);
+}
+
+.save-status[data-status="conflict"],
+.save-status[data-status="error"] {
+  color: var(--app-error);
+}
+
+.save-status__dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.75;
+}
+
+.save-status__stats {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--app-muted);
+  font-weight: 600;
+  text-overflow: ellipsis;
+}
+
+.mode-switcher {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px;
+  border: 1px solid var(--app-border);
+  border-radius: 7px;
+  background: var(--app-surface-raised);
+  padding: 2px;
+}
+
+.mode-switcher button {
+  display: inline-flex;
+  min-width: 0;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--app-muted);
+  cursor: pointer;
+  padding: 0 9px;
+  font-size: 12px;
+  font-weight: 700;
+  transition:
+    background-color var(--motion-fast) var(--ease-standard),
+    box-shadow var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard);
+}
+
+.mode-switcher button[aria-pressed="true"] {
+  background: var(--app-surface);
+  color: var(--app-text);
+  box-shadow: 0 1px 3px rgb(15 23 42 / 0.12);
+}
+
+.mode-switcher button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 .theme-switcher {
   display: none;
 }
@@ -364,6 +450,282 @@ button {
   min-width: 0;
   padding: 48px 32px 72px;
   animation: document-enter var(--motion-slow) var(--ease-emphasized) both;
+}
+
+.document-shell--editor {
+  padding-top: 28px;
+}
+
+.markdown-editor {
+  position: relative;
+  width: min(var(--reader-width, 780px), 100%);
+  margin: 0 auto;
+  color: var(--app-text);
+  font-family: var(
+    --reader-font-family,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif
+  );
+  font-size: var(--reader-font-size, 16px);
+  line-height: var(--reader-line-height, 1.7);
+}
+
+.writing-toolbar {
+  position: sticky;
+  top: calc(var(--top-bar-height) + 8px);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 22px;
+  pointer-events: none;
+}
+
+.writing-toolbar__segmented,
+.writing-toolbar__toggles {
+  display: inline-flex;
+  pointer-events: auto;
+  align-items: center;
+  gap: 2px;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--app-surface) 94%, transparent);
+  box-shadow: var(--app-shadow);
+  backdrop-filter: blur(14px);
+  padding: 3px;
+}
+
+.writing-toolbar button,
+.markdown-editor__notice-actions button {
+  display: inline-flex;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--app-muted);
+  cursor: pointer;
+  padding: 0 9px;
+  font-size: 12px;
+  font-weight: 750;
+  transition:
+    background-color var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard),
+    opacity var(--motion-fast) var(--ease-standard);
+}
+
+.writing-toolbar button:hover,
+.writing-toolbar button[aria-pressed="true"],
+.markdown-editor__notice-actions button:hover {
+  background: var(--app-accent-soft);
+  color: var(--app-accent);
+}
+
+.markdown-editor__notice {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+  border: 1px solid color-mix(in srgb, var(--app-error) 40%, var(--app-border));
+  border-radius: 8px;
+  background: var(--app-error-bg);
+  color: var(--app-error);
+  padding: 10px 12px;
+}
+
+.markdown-editor__notice strong,
+.markdown-editor__notice span {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.markdown-editor__notice span {
+  opacity: 0.86;
+}
+
+.markdown-editor__notice-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.markdown-editor__surface {
+  min-height: calc(100vh - var(--top-bar-height) - 140px);
+}
+
+.markdown-editor__loading {
+  color: var(--app-muted);
+  font-size: 13px;
+}
+
+.markdown-editor .milkdown {
+  background: transparent;
+  color: var(--app-text);
+  --crepe-color-background: var(--app-surface);
+  --crepe-color-on-background: var(--app-text);
+  --crepe-color-surface: var(--app-surface);
+  --crepe-color-surface-low: var(--app-surface-raised);
+  --crepe-color-on-surface: var(--app-text);
+  --crepe-color-on-surface-variant: var(--app-muted);
+  --crepe-color-outline: var(--app-border-strong);
+  --crepe-color-primary: var(--app-accent);
+  --crepe-color-secondary: var(--app-accent-soft);
+  --crepe-color-on-secondary: var(--app-accent);
+  --crepe-color-inverse: var(--app-text);
+  --crepe-color-on-inverse: var(--app-surface);
+  --crepe-color-inline-code: var(--app-error);
+  --crepe-color-error: var(--app-error);
+  --crepe-color-hover: var(--app-surface-raised);
+  --crepe-color-selected: var(--app-accent-soft);
+  --crepe-color-inline-area: var(--app-surface-raised);
+  --crepe-font-title: inherit;
+  --crepe-font-default: inherit;
+  --crepe-font-code: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --crepe-shadow-1: var(--app-shadow);
+  --crepe-shadow-2: var(--app-shadow-strong);
+}
+
+.markdown-editor .ProseMirror {
+  min-height: calc(100vh - var(--top-bar-height) - 150px);
+  outline: none;
+  padding-bottom: 80px;
+}
+
+.markdown-editor .ProseMirror,
+.markdown-editor .ProseMirror p,
+.markdown-editor .ProseMirror li {
+  color: var(--app-text);
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.markdown-editor .ProseMirror h1,
+.markdown-editor .ProseMirror h2,
+.markdown-editor .ProseMirror h3,
+.markdown-editor .ProseMirror h4,
+.markdown-editor .ProseMirror h5,
+.markdown-editor .ProseMirror h6 {
+  color: var(--app-text);
+  letter-spacing: 0;
+}
+
+.markdown-editor .ProseMirror h1 {
+  font-size: 2.15em;
+  line-height: 1.2;
+}
+
+.markdown-editor .ProseMirror h2 {
+  margin-top: 2.1em;
+  font-size: 1.55em;
+  line-height: 1.28;
+}
+
+.markdown-editor .ProseMirror h3 {
+  margin-top: 1.7em;
+  font-size: 1.25em;
+  line-height: 1.35;
+}
+
+.markdown-editor .ProseMirror code {
+  border-radius: 5px;
+  background: var(--app-surface-raised);
+  color: var(--app-text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.markdown-editor .ProseMirror pre {
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: var(--app-surface);
+}
+
+.markdown-editor .ProseMirror blockquote {
+  color: var(--app-muted);
+  border-left-color: var(--app-border-strong);
+}
+
+.markdown-editor .ProseMirror table {
+  width: 100%;
+}
+
+.markdown-editor .ProseMirror table,
+.markdown-source-editor .cm-content {
+  caret-color: var(--app-accent);
+}
+
+.markdown-editor--focus .ProseMirror > * {
+  opacity: 0.34;
+  transition: opacity var(--motion-fast) var(--ease-standard);
+}
+
+.markdown-editor--focus .ProseMirror > .is-writing-focus-block,
+.markdown-editor--focus .ProseMirror > .is-writing-focus-block * {
+  opacity: 1;
+}
+
+.markdown-editor--typewriter {
+  scroll-margin-top: 40vh;
+}
+
+.markdown-source-editor {
+  min-height: calc(100vh - var(--top-bar-height) - 150px);
+  color: var(--app-text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: calc(var(--reader-font-size, 16px) - 1px);
+  line-height: 1.62;
+}
+
+.markdown-source-editor .cm-editor {
+  min-height: calc(100vh - var(--top-bar-height) - 150px);
+  background: transparent;
+  color: var(--app-text);
+  outline: none;
+}
+
+.markdown-source-editor .cm-scroller {
+  overflow: visible;
+  font-family: inherit;
+  line-height: inherit;
+}
+
+.markdown-source-editor .cm-content {
+  min-height: calc(100vh - var(--top-bar-height) - 150px);
+  padding: 0 0 80px;
+}
+
+.markdown-source-editor .cm-line {
+  padding: 0;
+}
+
+.markdown-source-editor .cm-gutters {
+  border: 0;
+  background: transparent;
+  color: var(--app-muted);
+}
+
+.markdown-source-editor .cm-activeLine,
+.markdown-source-editor .cm-activeLineGutter {
+  background: color-mix(in srgb, var(--app-accent-soft) 42%, transparent);
+}
+
+.markdown-source-editor--focus .cm-line {
+  opacity: 0.34;
+  transition: opacity var(--motion-fast) var(--ease-standard);
+}
+
+.markdown-source-editor--focus .cm-activeLine {
+  opacity: 1;
 }
 
 .outline-panel {
@@ -619,8 +981,8 @@ button {
   bottom: 18px;
   z-index: 82;
   display: flex;
-  width: min(620px, calc(100vw - 28px));
-  max-height: min(700px, calc(100vh - 84px));
+  width: min(520px, calc(100vw - 28px));
+  max-height: min(560px, calc(100vh - 84px));
   flex-direction: column;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--app-border-strong) 78%, transparent);
@@ -1168,25 +1530,25 @@ button {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 12px;
-  min-height: 220px;
+  gap: 10px;
+  min-height: 170px;
   overflow: auto;
-  padding: 18px 18px 10px;
+  padding: 14px 14px 8px;
 }
 
 .ai-empty-state {
   display: flex;
-  min-height: 210px;
+  min-height: 148px;
   flex-direction: column;
   justify-content: center;
-  gap: 12px;
+  gap: 10px;
   padding: 8px 4px;
 }
 
 .ai-avatar {
   display: grid;
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
   place-items: center;
   border: 1px solid var(--app-border);
   border-radius: 8px;
@@ -1198,7 +1560,7 @@ button {
 .ai-empty-state h3 {
   margin: 0;
   color: var(--app-text);
-  font-size: 17px;
+  font-size: 15px;
   line-height: 1.25;
 }
 
@@ -1340,11 +1702,11 @@ button {
 .ai-composer {
   display: grid;
   gap: 8px;
-  margin: 0 12px 12px;
+  margin: 0 10px 10px;
   border: 1px solid var(--app-border-strong);
   border-radius: 8px;
   background: color-mix(in srgb, var(--app-surface-raised) 70%, var(--app-surface));
-  padding: 11px;
+  padding: 10px;
   transition:
     background-color var(--motion-fast) var(--ease-standard),
     border-color var(--motion-fast) var(--ease-standard),
@@ -1358,14 +1720,14 @@ button {
 }
 
 .ai-context-list--composer {
-  max-height: 68px;
+  max-height: 58px;
   overflow: auto;
 }
 
 .ai-composer .ai-prompt,
 .ai-composer .ai-prompt:focus {
-  min-height: 74px;
-  max-height: 160px;
+  min-height: 58px;
+  max-height: 128px;
   border: 0;
   background: transparent;
   box-shadow: none;
@@ -1701,6 +2063,12 @@ button {
   }
 }
 
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @keyframes ai-orb-pulse {
   0%,
   100% {
@@ -1779,12 +2147,53 @@ button {
     gap: 6px;
   }
 
+  .mode-switcher button {
+    width: 28px;
+    padding: 0;
+  }
+
+  .mode-switcher span {
+    display: none;
+  }
+
+  .save-status {
+    max-width: 96px;
+  }
+
+  .save-status__stats {
+    display: none;
+  }
+
   .top-bar__path {
     display: none;
   }
 
   .document-shell {
     padding: 24px 18px 48px;
+  }
+
+  .document-shell--editor {
+    padding-top: 16px;
+  }
+
+  .writing-toolbar {
+    position: static;
+    flex-direction: column;
+  }
+
+  .writing-toolbar__segmented,
+  .writing-toolbar__toggles {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .markdown-editor__notice {
+    grid-template-columns: 18px minmax(0, 1fr);
+  }
+
+  .markdown-editor__notice-actions {
+    grid-column: 1 / -1;
+    flex-wrap: wrap;
   }
 
   .reader-layout,

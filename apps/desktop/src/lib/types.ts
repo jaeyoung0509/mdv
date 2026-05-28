@@ -4,6 +4,12 @@ export type EffectiveTheme = "light" | "dark";
 
 export type FontPreset = "sans" | "serif" | "mono";
 
+export type EditorMode = "read" | "write";
+
+export type WritingSurfaceMode = "live" | "source";
+
+export type SaveStatus = "idle" | "dirty" | "saving" | "saved" | "conflict" | "error";
+
 export interface ReaderPreferences {
   theme: AppTheme;
   fontPreset: FontPreset;
@@ -93,6 +99,7 @@ export interface DocumentPayload {
   directory: string;
   content: string;
   watching: boolean;
+  modifiedMillis: number | null;
 }
 
 export interface DirectoryDocument {
