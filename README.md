@@ -1,4 +1,4 @@
-# mdv
+# mdv Writer
 
 Fast, beautiful Markdown viewing from the terminal.
 
@@ -8,7 +8,7 @@ mdv README.md
 mdv .
 ```
 
-`mdv` opens a Markdown file or directory in a lightweight Tauri desktop app. It stays read-first, with an optional Markdown writing mode for the current file: no vault setup, no account, and no knowledge-management system.
+`mdv Writer` opens a Markdown file or directory in a lightweight Tauri desktop app. It stays read-first, but now supports focused Markdown writing for the current file: no vault setup, no account, and no knowledge-management system. The terminal command remains `mdv`.
 
 ## Status
 

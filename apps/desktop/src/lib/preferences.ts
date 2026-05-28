@@ -1,4 +1,11 @@
-import type { AiProvider, AiSettings, FontPreset, ReaderBookmark, ReaderPreferences } from "./types";
+import type {
+  AiNoteThread,
+  AiProvider,
+  AiSettings,
+  FontPreset,
+  ReaderBookmark,
+  ReaderPreferences,
+} from "./types";
 
 export const DEFAULT_AI_SETTINGS: AiSettings = {
   activeProviderId: "",
@@ -13,6 +20,7 @@ export const DEFAULT_READER_PREFERENCES: ReaderPreferences = {
   contentWidth: 780,
   outlineVisible: true,
   bookmarks: {},
+  aiNotes: {},
   ai: DEFAULT_AI_SETTINGS,
 };
 
@@ -93,6 +101,84 @@ function normalizeBookmarks(
   );
 }
 
+function normalizeAiNotes(
+  aiNotes: Partial<ReaderPreferences>["aiNotes"],
+): Record<string, AiNoteThread[]> {
+  if (!aiNotes || typeof aiNotes !== "object") {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(aiNotes)
+      .map(([documentPath, documentNotes]) => {
+        const normalizedNotes = Array.isArray(documentNotes)
+          ? documentNotes
+              .map((thread) => {
+                const anchor = thread.anchor;
+                const createdAt = Number(thread.createdAt) || Date.now();
+                const updatedAt = Number(thread.updatedAt) || createdAt;
+                const messages = Array.isArray(thread.messages)
+                  ? thread.messages
+                      .map((message) => ({
+                        id: String(message.id || ""),
+                        role: message.role === "user" ? ("user" as const) : ("assistant" as const),
+                        content: String(message.content || ""),
+                        createdAt: Number(message.createdAt) || createdAt,
+                      }))
+                      .filter((message) => message.id && message.content.trim())
+                      .slice(-24)
+                  : [];
+
+                if (!anchor || !messages.length) {
+                  return null;
+                }
+
+                const label = String(anchor.label || thread.title || "AI note").trim();
+                const normalizedAnchor =
+                  anchor.kind === "heading"
+                    ? {
+                        kind: "heading" as const,
+                        headingId: String(anchor.headingId || ""),
+                        label,
+                        scrollYFallback: clamp(Number(anchor.scrollYFallback) || 0, 0, 4_294_967_295),
+                      }
+                    : anchor.kind === "lineRange"
+                      ? {
+                          kind: "lineRange" as const,
+                          fromLine: clamp(Number(anchor.fromLine) || 1, 1, 4_294_967_295),
+                          toLine: clamp(Number(anchor.toLine) || Number(anchor.fromLine) || 1, 1, 4_294_967_295),
+                          label,
+                        }
+                      : {
+                          kind: "offset" as const,
+                          scrollY: clamp(Number(anchor.scrollY) || 0, 0, 4_294_967_295),
+                          label,
+                        };
+
+                if (normalizedAnchor.kind === "heading" && !normalizedAnchor.headingId) {
+                  return null;
+                }
+
+                return {
+                  id: String(thread.id || ""),
+                  anchor: normalizedAnchor,
+                  title: String(thread.title || label || "AI note").trim(),
+                  messages,
+                  resolved: Boolean(thread.resolved),
+                  createdAt,
+                  updatedAt,
+                };
+              })
+              .filter((thread): thread is AiNoteThread => Boolean(thread?.id))
+              .slice(0, 80)
+          : [];
+
+        return [documentPath, normalizedNotes] as const;
+      })
+      .filter(([documentPath, documentNotes]) => documentPath && documentNotes.length > 0),
+  );
+}
+
 function normalizeAiProvider(provider: Partial<AiProvider>, index: number): AiProvider | null {
   if (isGeneratedDefaultAiProvider(provider)) {
     return null;
@@ -105,6 +191,7 @@ function normalizeAiProvider(provider: Partial<AiProvider>, index: number): AiPr
   const model = String(provider.model || "").trim();
   const reasoning = String(provider.reasoning || "").trim();
   const apiKey = String(provider.apiKey || "").trim();
+  const hasApiKey = Boolean(apiKey || provider.hasApiKey);
 
   if (!id || !name) {
     return null;
@@ -118,7 +205,7 @@ function normalizeAiProvider(provider: Partial<AiProvider>, index: number): AiPr
     model,
     reasoning,
     apiKey,
-    hasApiKey: Boolean(apiKey),
+    hasApiKey,
   };
 }
 
@@ -180,6 +267,7 @@ export function normalizeReaderPreferences(
         ? preferences.outlineVisible
         : DEFAULT_READER_PREFERENCES.outlineVisible,
     bookmarks: normalizeBookmarks(preferences.bookmarks),
+    aiNotes: normalizeAiNotes(preferences.aiNotes),
     ai: normalizeAiSettings(preferences.ai),
   };
 }

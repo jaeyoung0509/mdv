@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { renderMarkdownHtml } from "../lib/markdown";
 import type {
+  AiNoteThread,
   DocumentPayload,
   EffectiveTheme,
   OutlineHeading,
@@ -16,9 +17,11 @@ const props = defineProps<{
   preferences: ReaderPreferences;
   theme: EffectiveTheme;
   bookmarkedHeadingIds: Set<string>;
+  aiNotes: AiNoteThread[];
 }>();
 
 const emit = defineEmits<{
+  aiNoteSelect: [note: AiNoteThread];
   headingsChange: [headings: OutlineHeading[]];
   headingBookmarkToggle: [headingId: string, label: string];
   textSelection: [text: string, position: { x: number; y: number }];
@@ -27,6 +30,9 @@ const emit = defineEmits<{
 const articleRef = ref<HTMLElement | null>(null);
 const html = ref("");
 let renderVersion = 0;
+let mermaidId = 0;
+const codeBlockCache = new WeakMap<HTMLElement, { code: string; language: string | undefined }>();
+const mermaidBlockCache = new WeakMap<HTMLElement, string>();
 
 const readerStyle = computed(() => getReaderStyleProperties(props.preferences));
 
@@ -47,6 +53,7 @@ function getHeadingText(element: Element): string {
   const clone = element.cloneNode(true) as Element;
   clone.querySelector(".heading-anchor")?.remove();
   clone.querySelector(".bookmark-ribbon")?.remove();
+  clone.querySelector(".ai-note-marker")?.remove();
   return clone.textContent?.trim() ?? "";
 }
 
@@ -75,6 +82,20 @@ function checkIconSvg(): string {
   ].join(" ");
 }
 
+function noteIconSvg(): string {
+  return [
+    '<svg viewBox="0 0 24 24" width="13" height="13" fill="none"',
+    'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"',
+    'aria-hidden="true"><path d="M21 15a4 4 0 0 1-4 4H7l-4 4V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/></svg>',
+  ].join(" ");
+}
+
+function notesForHeading(headingId: string): AiNoteThread[] {
+  return props.aiNotes.filter(
+    (note) => !note.resolved && note.anchor.kind === "heading" && note.anchor.headingId === headingId,
+  );
+}
+
 function enhanceHeadings() {
   const article = articleRef.value;
 
@@ -82,7 +103,7 @@ function enhanceHeadings() {
     return;
   }
 
-  const headingElements = Array.from(article.querySelectorAll("h1, h2, h3, h4"));
+  const headingElements = Array.from(article.querySelectorAll("h1, h2, h3, h4, h5, h6"));
 
   for (const element of headingElements) {
     const headingId = element.id;
@@ -113,6 +134,23 @@ function enhanceHeadings() {
       event.stopPropagation();
       emit("headingBookmarkToggle", headingId, label);
     };
+
+    Array.from(element.querySelectorAll(".ai-note-marker")).forEach((marker) => marker.remove());
+    const headingNotes = notesForHeading(headingId);
+
+    if (headingNotes.length > 0) {
+      const noteButton = document.createElement("button");
+      noteButton.type = "button";
+      noteButton.className = "ai-note-marker";
+      noteButton.innerHTML = `${noteIconSvg()}<span>${headingNotes.length}</span>`;
+      noteButton.title = `${headingNotes.length} AI note${headingNotes.length === 1 ? "" : "s"}`;
+      noteButton.onclick = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        emit("aiNoteSelect", headingNotes[0]);
+      };
+      element.prepend(noteButton);
+    }
   }
 
   const headings = headingElements
@@ -129,7 +167,7 @@ function enhanceHeadings() {
 async function renderMermaid(target: HTMLElement, code: string) {
   try {
     const { default: mermaid } = await import("mermaid");
-    const id = `mdv-mermaid-${Math.random().toString(36).slice(2)}`;
+    const id = `mdv-mermaid-${++mermaidId}`;
     mermaid.initialize({
       startOnLoad: false,
       securityLevel: "strict",
@@ -139,6 +177,7 @@ async function renderMermaid(target: HTMLElement, code: string) {
     const { svg } = await mermaid.render(id, code);
     target.className = "mermaid-block";
     target.innerHTML = svg;
+    mermaidBlockCache.set(target, code);
   } catch (reason: unknown) {
     target.className = "mermaid-error";
     target.innerHTML = "";
@@ -187,6 +226,7 @@ function enhanceCodeBlocks() {
 
     const wrapper = document.createElement("div");
     wrapper.className = "code-block";
+    codeBlockCache.set(wrapper, { code, language });
 
     const bar = document.createElement("div");
     bar.className = "code-block__bar";
@@ -199,11 +239,15 @@ function enhanceCodeBlocks() {
     copyButton.title = "Copy code";
     copyButton.innerHTML = copyIconSvg();
     copyButton.onclick = async () => {
-      await navigator.clipboard.writeText(code);
-      copyButton.innerHTML = checkIconSvg();
-      window.setTimeout(() => {
-        copyButton.innerHTML = copyIconSvg();
-      }, 1200);
+      try {
+        await navigator.clipboard.writeText(code);
+        copyButton.innerHTML = checkIconSvg();
+        window.setTimeout(() => {
+          copyButton.innerHTML = copyIconSvg();
+        }, 1200);
+      } catch {
+        copyButton.title = "Could not copy code";
+      }
     };
 
     const content = document.createElement("div");
@@ -230,6 +274,40 @@ function enhanceCodeBlocks() {
       .catch(() => {
         content.replaceChildren(fallback);
       });
+  }
+}
+
+function refreshCodeBlockThemes() {
+  const article = articleRef.value;
+
+  if (!article) {
+    return;
+  }
+
+  for (const wrapper of Array.from(article.querySelectorAll<HTMLElement>(".code-block"))) {
+    const cached = codeBlockCache.get(wrapper);
+    const content = wrapper.querySelector<HTMLElement>(".code-block__content");
+
+    if (!cached || !content) {
+      continue;
+    }
+
+    import("../lib/shiki")
+      .then(({ highlightCode }) => highlightCode(cached.code, cached.language, props.theme))
+      .then((highlightedHtml) => {
+        if (highlightedHtml) {
+          content.innerHTML = highlightedHtml;
+        }
+      })
+      .catch(() => undefined);
+  }
+
+  for (const mermaidBlock of Array.from(article.querySelectorAll<HTMLElement>(".mermaid-block"))) {
+    const code = mermaidBlockCache.get(mermaidBlock);
+
+    if (code) {
+      void renderMermaid(mermaidBlock, code);
+    }
   }
 }
 
@@ -329,7 +407,7 @@ async function handleArticleClick(event: MouseEvent) {
 }
 
 watch(
-  () => [props.document.path, props.document.content, props.allowHtml, props.theme] as const,
+  () => [props.document.path, props.document.content, props.allowHtml] as const,
   () => {
     void renderDocument();
   },
@@ -337,9 +415,17 @@ watch(
 );
 
 watch(
-  () => props.bookmarkedHeadingIds,
+  () => [props.bookmarkedHeadingIds, props.aiNotes] as const,
   () => {
     void nextTick(enhanceHeadings);
+  },
+  { deep: true },
+);
+
+watch(
+  () => props.theme,
+  () => {
+    void nextTick(refreshCodeBlockThemes);
   },
 );
 

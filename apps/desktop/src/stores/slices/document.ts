@@ -91,7 +91,7 @@ export function createDocumentSlice(state: AppState, options: DocumentSliceOptio
     } catch (reason: unknown) {
       state.error.value = {
         kind: "ApplicationError",
-        message: "Could not initialize mdv.",
+        message: "Could not initialize mdv Writer.",
         details: reason instanceof Error ? reason.message : String(reason),
       };
       options.resetWritingForDocument(null);

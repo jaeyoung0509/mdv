@@ -2,7 +2,8 @@ import rehypeAutolinkHeadings from "rehype-autolink-headings";
 import type { Options as RehypeAutolinkHeadingsOptions } from "rehype-autolink-headings";
 import rehypeKatex from "rehype-katex";
 import rehypeRaw from "rehype-raw";
-import rehypeSanitize from "rehype-sanitize";
+import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
+import type { Options as RehypeSanitizeOptions } from "rehype-sanitize";
 import rehypeSlug from "rehype-slug";
 import rehypeStringify from "rehype-stringify";
 import remarkFrontmatter from "remark-frontmatter";
@@ -24,6 +25,18 @@ const autolinkHeadingOptions: RehypeAutolinkHeadingsOptions = {
   },
 };
 
+const sanitizeSchema: RehypeSanitizeOptions = {
+  ...defaultSchema,
+  attributes: {
+    ...defaultSchema.attributes,
+    code: [
+      ...(defaultSchema.attributes?.code ?? []),
+      ["className", /^language-[\w-]+$/, "math-inline", "math-display"],
+    ],
+    pre: [...(defaultSchema.attributes?.pre ?? []), ["className", /^language-[\w-]+$/]],
+  },
+};
+
 export async function renderMarkdownHtml(markdown: string, allowHtml = false): Promise<string> {
   let processor = unified()
     .use(remarkParse)
@@ -33,10 +46,11 @@ export async function renderMarkdownHtml(markdown: string, allowHtml = false): P
     .use(remarkRehype, { allowDangerousHtml: allowHtml });
 
   if (allowHtml) {
-    processor = processor.use(rehypeRaw).use(rehypeSanitize);
+    processor = processor.use(rehypeRaw);
   }
 
   const file = await processor
+    .use(rehypeSanitize, sanitizeSchema)
     .use(rehypeKatex)
     .use(rehypeSlug)
     .use(rehypeAutolinkHeadings, autolinkHeadingOptions)

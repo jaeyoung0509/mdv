@@ -16,9 +16,7 @@ import {
   AlertTriangle,
   Code2,
   Eye,
-  Focus,
   RefreshCw,
-  TextCursorInput,
   Upload,
 } from "@lucide/vue";
 import {
@@ -32,33 +30,33 @@ import {
 } from "vue";
 import { getReaderStyleProperties } from "../lib/readerSettings";
 import type {
+  AiNoteThread,
   EffectiveTheme,
   ReaderPreferences,
   SaveStatus,
+  WritingSelection,
   WritingSurfaceMode,
 } from "../lib/types";
 import type { Crepe } from "@milkdown/crepe";
 
 const props = defineProps<{
+  aiNotes: AiNoteThread[];
   content: string;
   error: string | null;
-  focusMode: boolean;
   preferences: ReaderPreferences;
   saveStatus: SaveStatus;
   surfaceMode: WritingSurfaceMode;
   theme: EffectiveTheme;
-  typewriterMode: boolean;
 }>();
 
 const emit = defineEmits<{
+  aiNoteSelect: [note: AiNoteThread];
   contentChange: [content: string];
-  focusModeChange: [enabled: boolean];
   overwrite: [];
   reload: [];
   save: [];
-  selectionChange: [text: string];
+  selectionChange: [selection: WritingSelection];
   surfaceModeChange: [mode: WritingSurfaceMode];
-  typewriterModeChange: [enabled: boolean];
 }>();
 
 const MarkdownSourceEditor = defineAsyncComponent(() =>
@@ -68,7 +66,6 @@ const MarkdownSourceEditor = defineAsyncComponent(() =>
 const editorRoot = ref<HTMLElement | null>(null);
 const ready = ref(false);
 let editor: Crepe | null = null;
-let focusBlock: Element | null = null;
 let applyingExternalContent = false;
 let destroyed = false;
 
@@ -100,8 +97,6 @@ async function replaceEditorContent(content: string) {
 }
 
 async function destroyEditor() {
-  focusBlock?.classList.remove("is-writing-focus-block");
-  focusBlock = null;
   ready.value = false;
   await editor?.destroy();
   editor = null;
@@ -154,48 +149,13 @@ function focusLiveEditor() {
 
 function syncSelectionState() {
   const selection = window.getSelection();
-  const selectedText = selection?.toString() ?? "";
-  emit("selectionChange", selectedText);
-  syncFocusBlock(selection);
-
-  if (props.typewriterMode) {
-    keepCaretCentered(selection);
-  }
-}
-
-function syncFocusBlock(selection: Selection | null | undefined) {
-  focusBlock?.classList.remove("is-writing-focus-block");
-  focusBlock = null;
-
-  if (!props.focusMode || !selection?.anchorNode || !editorRoot.value?.contains(selection.anchorNode)) {
-    return;
-  }
-
-  const anchor =
-    selection.anchorNode instanceof Element
-      ? selection.anchorNode
-      : selection.anchorNode.parentElement;
-  focusBlock = anchor?.closest("p,h1,h2,h3,h4,h5,h6,li,blockquote,pre,table") ?? null;
-  focusBlock?.classList.add("is-writing-focus-block");
-}
-
-function keepCaretCentered(selection: Selection | null | undefined) {
-  if (!selection?.rangeCount || !selection.anchorNode || !editorRoot.value?.contains(selection.anchorNode)) {
-    return;
-  }
-
-  const rect = selection.getRangeAt(0).getBoundingClientRect();
-
-  if (!rect.height && !rect.width) {
-    return;
-  }
-
-  const target = window.innerHeight * 0.42;
-  const delta = rect.top - target;
-
-  if (Math.abs(delta) > 48) {
-    window.scrollBy({ top: delta, behavior: "smooth" });
-  }
+  emit("selectionChange", {
+    text: selection?.toString() ?? "",
+    from: null,
+    to: null,
+    fromLine: null,
+    toLine: null,
+  });
 }
 
 watch(
@@ -220,11 +180,6 @@ watch(
   },
 );
 
-watch(
-  () => props.focusMode,
-  () => syncSelectionState(),
-);
-
 onMounted(() => {
   window.document.addEventListener("selectionchange", syncSelectionState);
   void mountEditor();
@@ -242,8 +197,6 @@ onBeforeUnmount(() => {
     <section
       :class="[
         'markdown-editor',
-        focusMode ? 'markdown-editor--focus' : '',
-        typewriterMode ? 'markdown-editor--typewriter' : '',
       ]"
       :data-surface-mode="surfaceMode"
       :data-theme="theme"
@@ -268,27 +221,6 @@ onBeforeUnmount(() => {
           >
             <Code2 :size="14" aria-hidden="true" />
             Source
-          </button>
-        </div>
-
-        <div class="writing-toolbar__toggles" role="group" aria-label="Writing focus controls">
-          <button
-            type="button"
-            :aria-pressed="focusMode"
-            title="Focus mode"
-            @click="emit('focusModeChange', !focusMode)"
-          >
-            <Focus :size="14" aria-hidden="true" />
-            Focus
-          </button>
-          <button
-            type="button"
-            :aria-pressed="typewriterMode"
-            title="Typewriter mode"
-            @click="emit('typewriterModeChange', !typewriterMode)"
-          >
-            <TextCursorInput :size="14" aria-hidden="true" />
-            Typewriter
           </button>
         </div>
       </div>
@@ -326,11 +258,11 @@ onBeforeUnmount(() => {
       <div v-if="surfaceMode === 'live'" ref="editorRoot" class="markdown-editor__surface" />
       <MarkdownSourceEditor
         v-else
+        :ai-notes="aiNotes"
         :content="content"
-        :focus-mode="focusMode"
         :preferences="preferences"
         :theme="theme"
-        :typewriter-mode="typewriterMode"
+        @ai-note-select="emit('aiNoteSelect', $event)"
         @content-change="emit('contentChange', $event)"
         @selection-change="emit('selectionChange', $event)"
       />

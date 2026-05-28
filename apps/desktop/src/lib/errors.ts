@@ -12,6 +12,10 @@ export function formatUnknownError(reason: unknown, fallback: string): string {
     return reason.message || fallback;
   }
 
+  if (typeof reason === "string" && reason.trim()) {
+    return reason.trim();
+  }
+
   const message = stringField(reason, "message");
   const details = stringField(reason, "details");
   const kind = stringField(reason, "kind");
@@ -23,10 +27,6 @@ export function formatUnknownError(reason: unknown, fallback: string): string {
 
   if (summary) {
     return summary;
-  }
-
-  if (typeof reason === "string") {
-    return reason;
   }
 
   return fallback;

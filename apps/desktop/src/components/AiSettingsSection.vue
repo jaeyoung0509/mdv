@@ -132,7 +132,7 @@ async function saveApiKey(providerId: string) {
     if (remoteSettings) {
       emit("change", remoteSettings);
     }
-    status[providerId] = "Saved to settings JSON";
+    status[providerId] = "Saved to keychain";
   } catch (error) {
     status[providerId] = formatUnknownError(error, "Could not save this API key.");
   }
@@ -164,7 +164,7 @@ async function testProvider(providerId: string) {
     <div class="settings-section__title ai-settings__title">
       <div>
         <h3>AI</h3>
-        <p>Manage providers used by Ask AI.</p>
+        <p>Manage providers used by AI writing and chat.</p>
       </div>
       <div class="settings-actions">
         <button
@@ -308,7 +308,7 @@ async function testProvider(providerId: string) {
               class="settings-input"
               type="password"
               :value="activeProvider.apiKey"
-              :placeholder="activeProvider.hasApiKey ? 'Stored in settings JSON' : 'Paste API key'"
+              :placeholder="activeProvider.hasApiKey ? 'Stored in OS keychain' : 'Paste API key'"
               @input="
                 updateProvider(activeProvider.id, {
                   apiKey: ($event.currentTarget as HTMLInputElement).value,
@@ -319,7 +319,7 @@ async function testProvider(providerId: string) {
             <button
               type="button"
               class="secondary-button secondary-button--compact"
-              title="Save API key to settings JSON"
+              title="Save API key to OS keychain"
               @click="saveApiKey(activeProvider.id)"
             >
               <KeyRound :size="14" aria-hidden="true" />

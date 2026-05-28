@@ -35,6 +35,7 @@ export function createPreferencesSlice(state: AppState) {
     updatePreferences((current) => ({
       ...DEFAULT_READER_PREFERENCES,
       bookmarks: current.bookmarks,
+      aiNotes: current.aiNotes,
       ai: current.ai,
     }));
   }

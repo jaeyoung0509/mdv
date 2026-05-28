@@ -8,7 +8,28 @@ export type EditorMode = "read" | "write";
 
 export type WritingSurfaceMode = "live" | "source";
 
+export type AiPanelMode = "ask" | "write";
+
+export type AiWriteApplyAction = "insert" | "replace" | "append";
+
 export type SaveStatus = "idle" | "dirty" | "saving" | "saved" | "conflict" | "error";
+
+export type MdvErrorKind =
+  | "AiApiKeyMissing"
+  | "AiNetworkError"
+  | "AiProviderError"
+  | "AiProviderNotFound"
+  | "ApplicationError"
+  | "DocumentConflict"
+  | "FileNotFound"
+  | "InvalidAiPrompt"
+  | "InvalidAiProvider"
+  | "NoMarkdownFiles"
+  | "PreferencesError"
+  | "PreviewMode"
+  | "ReloadError"
+  | "UnknownError"
+  | (string & {});
 
 export interface ReaderPreferences {
   theme: AppTheme;
@@ -18,6 +39,7 @@ export interface ReaderPreferences {
   contentWidth: number;
   outlineVisible: boolean;
   bookmarks: Record<string, ReaderBookmark[]>;
+  aiNotes: Record<string, AiNoteThread[]>;
   ai: AiSettings;
 }
 
@@ -39,6 +61,42 @@ export interface ReaderBookmark {
   createdAt: number;
 }
 
+export type AiNoteAnchor =
+  | {
+      kind: "heading";
+      headingId: string;
+      label: string;
+      scrollYFallback: number;
+    }
+  | {
+      kind: "lineRange";
+      fromLine: number;
+      toLine: number;
+      label: string;
+    }
+  | {
+      kind: "offset";
+      scrollY: number;
+      label: string;
+    };
+
+export interface AiNoteMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  createdAt: number;
+}
+
+export interface AiNoteThread {
+  id: string;
+  anchor: AiNoteAnchor;
+  title: string;
+  messages: AiNoteMessage[];
+  resolved: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export type AiProviderKind = "openaiCompatible" | "claude";
 
 export interface AiProvider {
@@ -48,7 +106,6 @@ export interface AiProvider {
   baseUrl: string;
   model: string;
   reasoning: string;
-  // TODO: Move API keys back to OS secure storage once desktop keychain persistence is reliable.
   apiKey: string;
   hasApiKey: boolean;
 }
@@ -66,6 +123,7 @@ export interface AiContextItem {
 
 export interface AiChatRequest {
   providerId: string;
+  mode?: AiPanelMode;
   prompt: string;
   contextItems: AiContextItem[];
   conversationId?: string;
@@ -78,7 +136,7 @@ export interface AiStreamEvent {
 
 export interface AiCompleteEvent {
   runId: string;
-  usage?: unknown;
+  usage?: AiUsage;
 }
 
 export interface AiErrorEvent {
@@ -91,6 +149,21 @@ export interface OutlineHeading {
   id: string;
   level: number;
   text: string;
+}
+
+export interface WritingSelection {
+  text: string;
+  from: number | null;
+  to: number | null;
+  fromLine: number | null;
+  toLine: number | null;
+}
+
+export interface AiUsage {
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  [key: string]: unknown;
 }
 
 export interface DocumentPayload {
@@ -109,7 +182,7 @@ export interface DirectoryDocument {
 }
 
 export interface MdvError {
-  kind: string;
+  kind: MdvErrorKind;
   message: string;
   path?: string;
   cwd?: string;

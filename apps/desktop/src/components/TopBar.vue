@@ -17,6 +17,7 @@ import {
   Sparkles,
 } from "@lucide/vue";
 import { computed, onBeforeUnmount, ref, watch as vueWatch } from "vue";
+import BrandMark from "./BrandMark.vue";
 import type { DirectoryDocument, DocumentPayload, EditorMode, SaveStatus } from "../lib/types";
 
 const props = withDefaults(
@@ -97,7 +98,11 @@ async function copyPath() {
     return;
   }
 
-  await navigator.clipboard.writeText(props.document.path);
+  try {
+    await navigator.clipboard.writeText(props.document.path);
+  } catch {
+    // Clipboard permission can be denied; the path remains visible in the title tooltip.
+  }
 }
 
 function openDocument(path: string) {
@@ -153,6 +158,7 @@ onBeforeUnmount(() => {
 <template>
   <header class="top-bar">
     <div ref="titleRef" class="top-bar__title">
+      <BrandMark />
       <template v-if="document">
         <button
           type="button"
@@ -211,7 +217,7 @@ onBeforeUnmount(() => {
           </button>
         </div>
       </template>
-      <span v-else class="top-bar__file">mdv</span>
+      <span v-else class="top-bar__file">mdv Writer</span>
     </div>
 
     <div class="top-bar__actions">

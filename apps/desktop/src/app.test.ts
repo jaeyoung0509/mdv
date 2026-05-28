@@ -5,6 +5,7 @@ import { createPinia, setActivePinia } from "pinia";
 import { defineComponent, h } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./app.vue";
+import type { AiSettings, DocumentPayload, ReaderPreferences } from "./lib/types";
 import { useAppStore } from "./stores/app";
 import { AUTOSAVE_DELAY_MS } from "./stores/slices/writing";
 
@@ -60,24 +61,19 @@ vi.mock("./components/MarkdownEditor.vue", () => ({
         type: String,
         required: true,
       },
-      focusMode: {
-        type: Boolean,
-        required: true,
-      },
-      typewriterMode: {
-        type: Boolean,
-        required: true,
+      aiNotes: {
+        type: Array,
+        default: () => [],
       },
     },
     emits: [
+      "aiNoteSelect",
       "contentChange",
-      "focusModeChange",
       "overwrite",
       "reload",
       "save",
       "selectionChange",
       "surfaceModeChange",
-      "typewriterModeChange",
     ],
     setup(props, { emit }) {
       return () =>
@@ -97,22 +93,6 @@ vi.mock("./components/MarkdownEditor.vue", () => ({
               onClick: () => emit("surfaceModeChange", "source"),
             },
             "Source",
-          ),
-          h(
-            "button",
-            {
-              type: "button",
-              onClick: () => emit("focusModeChange", !props.focusMode),
-            },
-            "Focus",
-          ),
-          h(
-            "button",
-            {
-              type: "button",
-              onClick: () => emit("typewriterModeChange", !props.typewriterMode),
-            },
-            "Typewriter",
           ),
           h("textarea", {
             "aria-label": "Markdown editor",
@@ -153,7 +133,7 @@ vi.mock("./components/MarkdownEditor.vue", () => ({
   }),
 }));
 
-const aiSettings = {
+const aiSettings: AiSettings = {
   activeProviderId: "provider-1",
   providers: [
     {
@@ -169,7 +149,7 @@ const aiSettings = {
   ],
 };
 
-const initialDocument = {
+const initialDocument: DocumentPayload = {
   path: "/Users/apple/project/quiz123.md",
   fileName: "quiz123.md",
   directory: "/Users/apple/project",
@@ -178,7 +158,7 @@ const initialDocument = {
   modifiedMillis: 10,
 };
 
-const preferences = {
+const preferences: ReaderPreferences = {
   theme: "light",
   fontPreset: "sans",
   fontSize: 16,
@@ -186,6 +166,7 @@ const preferences = {
   contentWidth: 780,
   outlineVisible: false,
   bookmarks: {},
+  aiNotes: {},
   ai: aiSettings,
 };
 
@@ -470,7 +451,7 @@ describe("App writing store", () => {
     expect(mocks.invoke).not.toHaveBeenCalledWith("save_document", expect.anything());
   });
 
-  it("tracks writing surface and focus controls without changing the draft", () => {
+  it("tracks writing surface and selection without changing the draft", () => {
     setActivePinia(createPinia());
     const store = useAppStore();
 
@@ -478,13 +459,15 @@ describe("App writing store", () => {
     store.resetWritingForDocument(initialDocument);
     store.updateDraftContent("# Draft");
     store.setWritingSurfaceMode("source");
-    store.setFocusMode(true);
-    store.setTypewriterMode(true);
-    store.updateWritingSelection("two words");
+    store.updateWritingSelection({
+      text: "two words",
+      from: 0,
+      to: 9,
+      fromLine: 1,
+      toLine: 1,
+    });
 
     expect(store.writingSurfaceMode).toBe("source");
-    expect(store.focusMode).toBe(true);
-    expect(store.typewriterMode).toBe(true);
     expect(store.wordCount).toBe(1);
     expect(store.selectedWordCount).toBe(2);
     expect(store.draftContent).toBe("# Draft");
@@ -504,5 +487,48 @@ describe("App writing store", () => {
       documentPath: initialDocument.path,
     });
     expect(store.draftContent).toContain("![dropped](assets/dropped.png)");
+  });
+
+  it("applies AI writing output to the current draft selection", () => {
+    setActivePinia(createPinia());
+    const store = useAppStore();
+
+    store.document = initialDocument;
+    store.resetWritingForDocument(initialDocument);
+    store.setEditorMode("write");
+    store.updateWritingSelection({
+      text: "# Quiz",
+      from: 0,
+      to: 6,
+      fromLine: 1,
+      toLine: 1,
+    });
+    store.aiAnswer = "# Revised Quiz";
+
+    store.applyAiAnswerToDraft("replace");
+
+    expect(store.draftContent).toBe("# Revised Quiz\n\nA long document body");
+    expect(store.saveStatus).toBe("dirty");
+  });
+
+  it("stores AI answers as local document notes", () => {
+    setActivePinia(createPinia());
+    const store = useAppStore();
+
+    store.document = initialDocument;
+    store.preferences = preferences;
+    store.aiLastPrompt = "Review this section";
+    store.aiAnswer = "Looks good, but add an example.";
+
+    store.attachAiAnswerAsNote();
+
+    expect(store.preferences.aiNotes[initialDocument.path]).toHaveLength(1);
+    expect(store.preferences.aiNotes[initialDocument.path][0]).toMatchObject({
+      title: "Looks good, but add an example.",
+      messages: expect.arrayContaining([
+        expect.objectContaining({ role: "user", content: "Review this section" }),
+        expect.objectContaining({ role: "assistant", content: "Looks good, but add an example." }),
+      ]),
+    });
   });
 });

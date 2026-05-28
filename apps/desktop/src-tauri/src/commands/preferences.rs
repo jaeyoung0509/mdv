@@ -1,8 +1,8 @@
 use tauri::State;
 
 use super::{
-    normalize_reader_preferences, normalize_theme, save_preferences, MdvError, ReaderPreferences,
-    SharedState,
+    ai::{migrate_ai_keys_to_keychain, scrub_ai_api_keys}, normalize_reader_preferences,
+    normalize_theme, save_preferences, MdvError, ReaderPreferences, SharedState,
 };
 
 #[tauri::command]
@@ -31,7 +31,9 @@ pub fn save_reader_preferences(
     preferences: ReaderPreferences,
     state: State<'_, SharedState>,
 ) -> Result<ReaderPreferences, MdvError> {
-    let preferences = normalize_reader_preferences(preferences);
+    let mut preferences = normalize_reader_preferences(preferences);
+    migrate_ai_keys_to_keychain(&mut preferences);
+    scrub_ai_api_keys(&mut preferences);
     save_preferences(&preferences)?;
 
     let mut inner = state.inner.lock().expect("runtime state poisoned");

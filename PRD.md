@@ -1,8 +1,8 @@
-# PRD: mdv - Fast, Beautiful Markdown Viewer
+# PRD: mdv Writer - Fast Markdown Reading and Writing
 
 ## 1. Product Summary
 
-`mdv` is an ultra-light desktop Markdown viewer that opens Markdown files directly from the terminal.
+`mdv Writer` is an ultra-light desktop Markdown reader and writer that opens Markdown files directly from the terminal through the `mdv` command.
 
 ```sh
 mdv lecture.md

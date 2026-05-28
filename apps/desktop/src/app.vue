@@ -49,7 +49,7 @@ useAppLifecycle(store);
     <main class="state-view">
       <section class="state-panel">
         <p class="state-eyebrow">Loading</p>
-        <h1>Opening Markdown...</h1>
+        <h1>Opening mdv Writer...</h1>
       </section>
     </main>
   </div>
@@ -88,10 +88,14 @@ useAppLifecycle(store);
       <OutlinePanel
         :bookmarks="store.documentBookmarks"
         :headings="store.headings"
+        :ai-notes="store.documentAiNotes"
         :open="store.preferences.outlineVisible"
         @close="store.changePreferences({ outlineVisible: false })"
         @bookmark-remove="store.removeBookmark"
         @bookmark-select="store.selectBookmark"
+        @ai-note-remove="store.removeAiNote"
+        @ai-note-resolve="store.setAiNoteResolved"
+        @ai-note-select="store.selectAiNote"
       />
       <MarkdownView
         v-if="store.editorMode === 'read'"
@@ -100,28 +104,28 @@ useAppLifecycle(store);
         :preferences="store.preferences"
         :theme="store.effectiveTheme"
         :bookmarked-heading-ids="store.bookmarkedHeadingIds"
+        :ai-notes="store.documentAiNotes"
         @headings-change="store.updateHeadings"
         @heading-bookmark-toggle="store.toggleHeadingBookmark"
+        @ai-note-select="store.selectAiNote"
         @text-selection="store.handleTextSelection"
       />
       <MarkdownEditor
         v-else
         :content="store.draftContent"
         :error="store.saveError"
-        :focus-mode="store.focusMode"
+        :ai-notes="store.documentAiNotes"
         :preferences="store.preferences"
         :save-status="store.saveStatus"
         :surface-mode="store.writingSurfaceMode"
         :theme="store.effectiveTheme"
-        :typewriter-mode="store.typewriterMode"
         @content-change="store.updateDraftContent"
-        @focus-mode-change="store.setFocusMode"
+        @ai-note-select="store.selectAiNote"
         @overwrite="store.overwriteExternalChanges"
         @reload="store.reloadWritingDocument"
         @save="store.saveCurrentDocument"
         @selection-change="store.updateWritingSelection"
         @surface-mode-change="store.setWritingSurfaceMode"
-        @typewriter-mode-change="store.setTypewriterMode"
       />
     </div>
 
@@ -164,13 +168,18 @@ useAppLifecycle(store);
       :context-items="store.aiContextItems"
       :current-document-label="store.document?.fileName"
       :error="store.aiError"
+      :mode="store.aiPanelMode"
       :open="store.aiPanelOpen"
       :settings="store.preferences.ai"
       :status="store.aiStatus"
+      :write-enabled="Boolean(store.document)"
+      @answer-apply="store.applyAiAnswerToDraft"
+      @answer-attach="store.attachAiAnswerAsNote"
       @cancel="store.cancelAiQuestion"
       @close="store.closeAiPanel"
       @context-add="store.addAiContextItems"
       @context-remove="store.removeAiContextItem"
+      @mode-change="store.setAiPanelMode"
       @provider-change="store.updateAiProvider"
       @send="store.sendAiQuestion"
     />

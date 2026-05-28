@@ -4,7 +4,7 @@ Guidance for coding agents working in this repository.
 
 ## Project Overview
 
-`mdv` is a read-first Markdown desktop app launched from the terminal. It opens a file or directory in a lightweight Tauri v2 app, renders Markdown quickly, and provides an optional writing mode for the current file.
+`mdv Writer` is a read-first Markdown desktop app launched from the `mdv` terminal command. It opens a file or directory in a lightweight Tauri v2 app, renders Markdown quickly, and provides a writing mode for the current file.
 
 The product principle is:
 

@@ -141,6 +141,40 @@
   transform: translateX(0);
 }
 
+.ai-note-marker {
+  position: absolute;
+  top: 0.22em;
+  left: -62px;
+  display: inline-flex;
+  min-width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border: 1px solid color-mix(in srgb, var(--app-accent) 42%, var(--app-border));
+  border-radius: 999px;
+  background: var(--app-surface);
+  color: var(--app-accent);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 800;
+  opacity: 0;
+  padding: 0 5px;
+  transform: translateX(4px);
+  transition:
+    background-color var(--motion-fast) var(--ease-standard),
+    opacity var(--motion-fast) var(--ease-standard),
+    transform var(--motion-fast) var(--ease-emphasized);
+}
+
+.ai-note-marker:hover,
+.ai-note-marker:focus-visible,
+.bookmarkable-heading:hover .ai-note-marker {
+  background: var(--app-accent-soft);
+  opacity: 1;
+  transform: translateX(0);
+}
+
 .mdv-markdown code {
   border-radius: 5px;
   background: var(--app-surface-raised);

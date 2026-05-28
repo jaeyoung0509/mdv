@@ -1,4 +1,5 @@
 use futures_util::StreamExt;
+use keyring::Entry;
 use serde::Serialize;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
@@ -9,8 +10,10 @@ use url::Url;
 
 use super::{
     normalize_ai_provider, normalize_reader_preferences, save_preferences, AiChatRequest,
-    AiProvider, AiSettings, MdvError, SharedState,
+    AiProvider, AiSettings, MdvError, ReaderPreferences, SharedState,
 };
+
+const KEYCHAIN_SERVICE: &str = "mdv.ai";
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -61,8 +64,11 @@ pub fn save_ai_provider(
     for existing in preferences.ai.providers.iter_mut() {
         if existing.id == provider.id {
             if provider.api_key.is_empty() {
-                provider.api_key = existing.api_key.clone();
-                provider.has_api_key = !provider.api_key.trim().is_empty();
+                provider.has_api_key = existing.has_api_key || ai_api_key_exists(&provider.id);
+            } else {
+                save_ai_api_key(&provider.id, &provider.api_key)?;
+                provider.api_key.clear();
+                provider.has_api_key = true;
             }
             *existing = provider.clone();
             updated = true;
@@ -71,6 +77,11 @@ pub fn save_ai_provider(
     }
 
     if !updated {
+        if !provider.api_key.is_empty() {
+            save_ai_api_key(&provider.id, &provider.api_key)?;
+            provider.api_key.clear();
+            provider.has_api_key = true;
+        }
         preferences.ai.providers.push(provider.clone());
         preferences.ai.active_provider_id = provider.id;
     }
@@ -99,6 +110,7 @@ pub fn delete_ai_provider(
         .ai
         .providers
         .retain(|provider| provider.id != provider_id);
+    let _ = delete_ai_api_key(&provider_id);
 
     if !preferences
         .ai
@@ -212,10 +224,43 @@ pub fn cancel_ai_chat(run_id: String, state: State<'_, SharedState>) -> bool {
 
 fn with_ai_key_presence(mut settings: AiSettings) -> AiSettings {
     for provider in settings.providers.iter_mut() {
-        provider.has_api_key = !provider.api_key.trim().is_empty();
+        if !provider.api_key.trim().is_empty() {
+            if save_ai_api_key(&provider.id, &provider.api_key).is_ok() {
+                provider.api_key.clear();
+            }
+        }
+        provider.has_api_key = ai_api_key_exists(&provider.id);
     }
 
     settings
+}
+
+pub(super) fn migrate_ai_keys_to_keychain(preferences: &mut ReaderPreferences) -> bool {
+    let mut migrated = false;
+
+    for provider in preferences.ai.providers.iter_mut() {
+        if provider.api_key.trim().is_empty() {
+            provider.has_api_key = ai_api_key_exists(&provider.id);
+            continue;
+        }
+
+        if save_ai_api_key(&provider.id, &provider.api_key).is_ok() {
+            provider.api_key.clear();
+            provider.has_api_key = true;
+            migrated = true;
+        }
+    }
+
+    migrated
+}
+
+pub(super) fn scrub_ai_api_keys(preferences: &mut ReaderPreferences) {
+    for provider in preferences.ai.providers.iter_mut() {
+        if !provider.api_key.trim().is_empty() {
+            provider.has_api_key = provider.has_api_key || ai_api_key_exists(&provider.id);
+            provider.api_key.clear();
+        }
+    }
 }
 
 fn get_ai_provider(
@@ -235,7 +280,19 @@ fn get_ai_provider(
 }
 
 fn load_ai_api_key_from_provider(provider: &AiProvider) -> Result<String, MdvError> {
-    let api_key = provider.api_key.trim().to_string();
+    let api_key = load_ai_api_key(&provider.id).or_else(|_| {
+        let fallback = provider.api_key.trim().to_string();
+
+        if fallback.is_empty() {
+            Err(MdvError::new(
+                "AiApiKeyMissing",
+                "Add an API key for this AI provider first.",
+            ))
+        } else {
+            Ok(fallback)
+        }
+    })?;
+
     if api_key.trim().is_empty() {
         return Err(MdvError::new(
             "AiApiKeyMissing",
@@ -244,6 +301,42 @@ fn load_ai_api_key_from_provider(provider: &AiProvider) -> Result<String, MdvErr
     }
 
     Ok(api_key)
+}
+
+fn keychain_entry(provider_id: &str) -> Result<Entry, MdvError> {
+    Entry::new(KEYCHAIN_SERVICE, provider_id).map_err(|error| {
+        MdvError::new("PreferencesError", "Could not open the OS keychain.")
+            .with_details(error.to_string())
+    })
+}
+
+fn save_ai_api_key(provider_id: &str, api_key: &str) -> Result<(), MdvError> {
+    keychain_entry(provider_id)?
+        .set_password(api_key.trim())
+        .map_err(|error| {
+            MdvError::new("PreferencesError", "Could not save the AI API key to the OS keychain.")
+                .with_details(error.to_string())
+        })
+}
+
+fn load_ai_api_key(provider_id: &str) -> Result<String, MdvError> {
+    keychain_entry(provider_id)?.get_password().map_err(|error| {
+        MdvError::new("AiApiKeyMissing", "Add an API key for this AI provider first.")
+            .with_details(error.to_string())
+    })
+}
+
+fn delete_ai_api_key(provider_id: &str) -> Result<(), MdvError> {
+    keychain_entry(provider_id)?
+        .delete_credential()
+        .map_err(|error| {
+            MdvError::new("PreferencesError", "Could not delete the AI API key from the OS keychain.")
+                .with_details(error.to_string())
+        })
+}
+
+fn ai_api_key_exists(provider_id: &str) -> bool {
+    load_ai_api_key(provider_id).is_ok()
 }
 
 fn validate_ai_provider_config(provider: &AiProvider) -> Result<(), MdvError> {
@@ -376,7 +469,11 @@ async fn stream_ai_chat(
 ) -> Result<(), MdvError> {
     let client = reqwest::Client::new();
     let endpoint = ai_endpoint_url(&provider);
-    let system_prompt = "You are mdv's read-only Markdown assistant. Answer only in clean GitHub-flavored Markdown. Use headings, bullet lists, tables, and fenced code blocks when they improve clarity. Answer from the supplied context when possible. Do not claim to edit files or operate the app.";
+    let system_prompt = if request.mode.as_deref() == Some("write") {
+        "You are mdv Writer's Markdown writing assistant. Answer in clean GitHub-flavored Markdown that can be inserted into the user's current draft. Preserve Markdown structure, avoid front matter unless requested, and never claim that you already edited or saved the file."
+    } else {
+        "You are mdv Writer's Markdown assistant. Answer only in clean GitHub-flavored Markdown. Use headings, bullet lists, tables, and fenced code blocks when they improve clarity. Answer from the supplied context when possible. Do not claim to edit files or operate the app."
+    };
     let user_content = build_ai_user_content(&request);
     let http_request = if provider.kind == "claude" {
         let max_tokens = claude_max_tokens_for_reasoning(&provider, 2048);

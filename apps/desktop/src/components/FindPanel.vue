@@ -33,6 +33,9 @@ const matchCount = ref(0);
 const activeIndex = ref(-1);
 const inputRef = ref<HTMLInputElement | null>(null);
 let ranges: Range[] = [];
+let cachedSegments: TextSegment[] = [];
+let cachedHaystack = "";
+let updateTimer: number | null = null;
 
 function getHighlightTools():
   | { Highlight: HighlightConstructor; registry: HighlightRegistry }
@@ -115,9 +118,25 @@ function pointAt(segments: TextSegment[], offset: number) {
   return { node: last.node, offset: last.node.data.length };
 }
 
+function getCachedTextSegments(root: Element) {
+  if (cachedSegments.length === 0) {
+    cachedSegments = collectTextSegments(root);
+    cachedHaystack = cachedSegments.map((segment) => segment.node.data).join("");
+  }
+
+  return {
+    segments: cachedSegments,
+    haystack: cachedHaystack,
+  };
+}
+
+function clearSegmentCache() {
+  cachedSegments = [];
+  cachedHaystack = "";
+}
+
 function createSearchRanges(root: Element, searchQuery: string): Range[] {
-  const segments = collectTextSegments(root);
-  const haystack = segments.map((segment) => segment.node.data).join("");
+  const { segments, haystack } = getCachedTextSegments(root);
   const normalizedHaystack = haystack.toLocaleLowerCase();
   const normalizedQuery = searchQuery.toLocaleLowerCase();
   const searchRanges: Range[] = [];
@@ -230,6 +249,17 @@ function updateRanges() {
   activeIndex.value = ranges.length > 0 ? 0 : -1;
 }
 
+function scheduleUpdateRanges() {
+  if (updateTimer) {
+    window.clearTimeout(updateTimer);
+  }
+
+  updateTimer = window.setTimeout(() => {
+    updateTimer = null;
+    updateRanges();
+  }, 120);
+}
+
 watch(
   () => props.open,
   async (open) => {
@@ -246,7 +276,15 @@ watch(
   },
 );
 
-watch(() => [props.documentKey, props.open, query.value, props.rootSelector], updateRanges);
+watch(
+  () => [props.documentKey, props.rootSelector] as const,
+  () => {
+    clearSegmentCache();
+    scheduleUpdateRanges();
+  },
+);
+
+watch(() => [props.open, query.value] as const, scheduleUpdateRanges);
 
 watch([activeIndex, matchCount, () => props.open, query], () => {
   if (!props.open) {
@@ -267,7 +305,12 @@ watch([activeIndex, matchCount, () => props.open, query], () => {
   }
 });
 
-onBeforeUnmount(clearFindHighlights);
+onBeforeUnmount(() => {
+  if (updateTimer) {
+    window.clearTimeout(updateTimer);
+  }
+  clearFindHighlights();
+});
 </script>
 
 <template>

@@ -5,6 +5,7 @@ import {
   Bot,
   FileText,
   MessageSquareQuote,
+  PenLine,
   Sparkles,
   Square,
   Trash2,
@@ -12,7 +13,13 @@ import {
 } from "@lucide/vue";
 import { computed, ref, watch, type Component } from "vue";
 import MarkdownHtml from "./MarkdownHtml.vue";
-import type { AiContextItem, AiProvider, AiSettings } from "../lib/types";
+import type {
+  AiContextItem,
+  AiPanelMode,
+  AiProvider,
+  AiSettings,
+  AiWriteApplyAction,
+} from "../lib/types";
 
 const TEXT_CONTEXT_LIMIT = 40 * 1024;
 
@@ -21,18 +28,23 @@ const props = defineProps<{
   contextItems: AiContextItem[];
   currentDocumentLabel?: string;
   error: string | null;
+  mode: AiPanelMode;
   open: boolean;
   settings: AiSettings;
   status: "idle" | "streaming" | "error";
+  writeEnabled: boolean;
 }>();
 
 const emit = defineEmits<{
+  answerApply: [action: AiWriteApplyAction];
+  answerAttach: [];
   cancel: [];
   close: [];
   contextAdd: [items: AiContextItem[]];
   contextRemove: [index: number];
+  modeChange: [mode: AiPanelMode];
   providerChange: [providerId: string];
-  send: [prompt: string];
+  send: [prompt: string, mode: AiPanelMode];
 }>();
 
 const draftPrompt = ref("");
@@ -59,6 +71,9 @@ const canSend = computed(() =>
 );
 const contextCount = computed(
   () => props.contextItems.length + (props.currentDocumentLabel ? 1 : 0),
+);
+const promptPlaceholder = computed(() =>
+  props.mode === "write" ? "Ask AI to write or revise..." : "Ask AI anything...",
 );
 
 watch(
@@ -126,7 +141,7 @@ function sendPrompt() {
   if (canSend.value) {
     const prompt = trimmedPrompt.value;
     draftPrompt.value = "";
-    emit("send", prompt);
+    emit("send", prompt, props.mode);
   }
 }
 
@@ -154,6 +169,27 @@ function handlePromptKeyDown(event: KeyboardEvent) {
         <h2>Ask AI</h2>
       </div>
       <div class="ai-panel__header-actions">
+        <div class="ai-mode-switcher" role="group" aria-label="AI mode">
+          <button
+            type="button"
+            :aria-pressed="mode === 'ask'"
+            title="Ask mode"
+            @click="emit('modeChange', 'ask')"
+          >
+            <Sparkles :size="13" aria-hidden="true" />
+            Ask
+          </button>
+          <button
+            type="button"
+            :aria-pressed="mode === 'write'"
+            :disabled="!writeEnabled"
+            title="Write mode"
+            @click="emit('modeChange', 'write')"
+          >
+            <PenLine :size="13" aria-hidden="true" />
+            Write
+          </button>
+        </div>
         <select
           v-if="settings.providers.length > 0"
           id="ai-provider"
@@ -195,11 +231,58 @@ function handlePromptKeyDown(event: KeyboardEvent) {
             <Bot :size="14" aria-hidden="true" />
             Find key trade-offs
           </button>
+          <button
+            type="button"
+            :disabled="!writeEnabled"
+            @click="
+              emit('modeChange', 'write');
+              draftPrompt = 'Improve this section while preserving Markdown structure.';
+            "
+          >
+            <PenLine :size="14" aria-hidden="true" />
+            Improve writing
+          </button>
         </div>
       </section>
 
-      <section v-if="answer" class="ai-answer mdv-markdown markdown-body" aria-live="polite">
-        <MarkdownHtml :content="answer" />
+      <section v-if="answer" class="ai-answer-card" aria-live="polite">
+        <div class="ai-answer mdv-markdown markdown-body">
+          <MarkdownHtml :content="answer" />
+        </div>
+        <div class="ai-answer-actions">
+          <button
+            v-if="mode === 'write'"
+            type="button"
+            class="secondary-button secondary-button--compact"
+            @click="emit('answerApply', 'insert')"
+          >
+            Insert
+          </button>
+          <button
+            v-if="mode === 'write'"
+            type="button"
+            class="secondary-button secondary-button--compact"
+            @click="emit('answerApply', 'replace')"
+          >
+            Replace
+          </button>
+          <button
+            v-if="mode === 'write'"
+            type="button"
+            class="secondary-button secondary-button--compact"
+            @click="emit('answerApply', 'append')"
+          >
+            Append
+          </button>
+          <button
+            type="button"
+            class="secondary-button secondary-button--compact"
+            :disabled="!writeEnabled"
+            @click="emit('answerAttach')"
+          >
+            Attach note
+          </button>
+        </div>
       </section>
 
       <div
@@ -261,12 +344,14 @@ function handlePromptKeyDown(event: KeyboardEvent) {
         v-model="draftPrompt"
         class="ai-prompt"
         aria-label="Ask AI"
-        placeholder="Ask AI anything..."
+        :placeholder="promptPlaceholder"
         @keydown="handlePromptKeyDown"
       />
 
       <div class="ai-composer__footer">
-        <span v-if="settings.providers.length > 0" class="ai-mode-pill">Auto</span>
+        <span v-if="settings.providers.length > 0" class="ai-mode-pill">
+          {{ mode === "write" ? "Write draft" : "Ask" }}
+        </span>
         <span v-else class="ai-provider-warning">Add an AI provider in Settings first.</span>
         <div class="ai-composer__actions">
           <button

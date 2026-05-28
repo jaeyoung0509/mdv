@@ -9,6 +9,7 @@ import {
   isTextContextPath,
   truncateContextText,
 } from "./slices/ai";
+import { createAiNotesSlice } from "./slices/aiNotes";
 import { createBookmarksSlice } from "./slices/bookmarks";
 import { createDocumentSlice } from "./slices/document";
 import { createPanelsSlice } from "./slices/panels";
@@ -31,7 +32,8 @@ export const useAppStore = defineStore("app", () => {
   resetWritingForDocument = writing.resetWritingForDocument;
 
   const bookmarks = createBookmarksSlice(state, preferences.updatePreferences);
-  const ai = createAiSlice(state, preferences.changeAiSettings);
+  const ai = createAiSlice(state, preferences.changeAiSettings, writing.updateDraftContent);
+  const aiNotes = createAiNotesSlice(state, preferences.updatePreferences);
   const panels = createPanelsSlice(state, preferences.changePreferences);
 
   async function handleDroppedPath(path: string) {
@@ -72,6 +74,7 @@ export const useAppStore = defineStore("app", () => {
     ...document,
     ...bookmarks,
     ...ai,
+    ...aiNotes,
     ...panels,
     ...writing,
     handleDroppedPath,

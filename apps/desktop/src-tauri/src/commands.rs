@@ -136,6 +136,66 @@ pub struct ReaderBookmark {
     created_at: u64,
 }
 
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiNoteThread {
+    #[serde(default)]
+    id: String,
+    #[serde(default)]
+    anchor: AiNoteAnchor,
+    #[serde(default)]
+    title: String,
+    #[serde(default)]
+    messages: Vec<AiNoteMessage>,
+    #[serde(default)]
+    resolved: bool,
+    #[serde(default)]
+    created_at: u64,
+    #[serde(default)]
+    updated_at: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum AiNoteAnchor {
+    Heading {
+        heading_id: String,
+        label: String,
+        scroll_y_fallback: u32,
+    },
+    LineRange {
+        from_line: u32,
+        to_line: u32,
+        label: String,
+    },
+    Offset {
+        scroll_y: u32,
+        label: String,
+    },
+}
+
+impl Default for AiNoteAnchor {
+    fn default() -> Self {
+        Self::Offset {
+            scroll_y: 0,
+            label: "Document".to_string(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiNoteMessage {
+    #[serde(default)]
+    id: String,
+    #[serde(default)]
+    role: String,
+    #[serde(default)]
+    content: String,
+    #[serde(default)]
+    created_at: u64,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum ReaderBookmarkTarget {
@@ -178,7 +238,6 @@ pub struct AiProvider {
     model: String,
     #[serde(default)]
     reasoning: String,
-    // TODO: Move API keys back to OS secure storage once desktop keychain persistence is reliable.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     api_key: String,
     #[serde(default)]
@@ -189,6 +248,8 @@ pub struct AiProvider {
 #[serde(rename_all = "camelCase")]
 pub struct AiChatRequest {
     provider_id: String,
+    #[serde(default)]
+    mode: Option<String>,
     prompt: String,
     #[serde(default)]
     context_items: Vec<ContextItem>,
@@ -222,6 +283,8 @@ pub struct ReaderPreferences {
     #[serde(default)]
     bookmarks: HashMap<String, Vec<ReaderBookmark>>,
     #[serde(default)]
+    ai_notes: HashMap<String, Vec<AiNoteThread>>,
+    #[serde(default)]
     ai: AiSettings,
 }
 
@@ -235,6 +298,7 @@ impl Default for ReaderPreferences {
             content_width: default_content_width(),
             outline_visible: default_outline_visible(),
             bookmarks: HashMap::new(),
+            ai_notes: HashMap::new(),
             ai: AiSettings::default(),
         }
     }
@@ -344,9 +408,15 @@ fn load_preferences() -> ReaderPreferences {
         return ReaderPreferences::default();
     };
 
-    serde_json::from_str(&content)
+    let mut preferences = serde_json::from_str(&content)
         .map(normalize_reader_preferences)
-        .unwrap_or_default()
+        .unwrap_or_default();
+
+    if ai::migrate_ai_keys_to_keychain(&mut preferences) {
+        let _ = save_preferences(&preferences);
+    }
+
+    preferences
 }
 
 fn save_preferences(preferences: &ReaderPreferences) -> Result<(), MdvError> {
@@ -489,6 +559,26 @@ fn normalize_reader_preferences(mut preferences: ReaderPreferences) -> ReaderPre
         });
         bookmarks.truncate(40);
         !path.is_empty() && !bookmarks.is_empty()
+    });
+    preferences.ai_notes.retain(|path, notes| {
+        for note in notes.iter_mut() {
+            note.title = if note.title.trim().is_empty() {
+                "AI note".to_string()
+            } else {
+                note.title.trim().to_string()
+            };
+            note.messages.retain(|message| {
+                let role = message.role.as_str();
+                !message.id.is_empty()
+                    && (role == "user" || role == "assistant")
+                    && !message.content.trim().is_empty()
+            });
+            note.messages.truncate(24);
+        }
+
+        notes.retain(|note| !note.id.is_empty() && !note.messages.is_empty());
+        notes.truncate(80);
+        !path.is_empty() && !notes.is_empty()
     });
     preferences.ai = normalize_ai_settings(preferences.ai);
     preferences

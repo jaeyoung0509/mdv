@@ -1,6 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { DocumentPayload, EditorMode, WritingSurfaceMode } from "../../lib/types";
+import type { DocumentPayload, EditorMode, WritingSelection, WritingSurfaceMode } from "../../lib/types";
 import { isTauriRuntime, toMdvError } from "../../composables/useTauriRuntime";
+import { countWords, emptyWritingSelection } from "../../lib/text";
+import { fileNameFromPath, isImagePath } from "../../lib/path";
 import type { AppState } from "../appState";
 
 export const AUTOSAVE_DELAY_MS = 1200;
@@ -21,17 +23,11 @@ export function createWritingSlice(state: AppState, options: WritingSliceOptions
 
   function syncSavedDocument(nextDocument: DocumentPayload) {
     state.document.value = nextDocument;
+    state.draftContent.value = nextDocument.content;
     state.savedContent.value = nextDocument.content;
     state.lastSavedModifiedMillis.value = nextDocument.modifiedMillis;
-
-    if (state.draftContent.value === nextDocument.content) {
-      state.saveStatus.value = "saved";
-      state.saveError.value = null;
-      return;
-    }
-
-    state.saveStatus.value = "dirty";
-    queueAutosave();
+    state.saveStatus.value = "saved";
+    state.saveError.value = null;
   }
 
   function resetWritingForDocument(nextDocument: DocumentPayload | null) {
@@ -41,6 +37,7 @@ export function createWritingSlice(state: AppState, options: WritingSliceOptions
     state.lastSavedModifiedMillis.value = nextDocument?.modifiedMillis ?? null;
     state.saveStatus.value = "idle";
     state.saveError.value = null;
+    state.writingSelection.value = emptyWritingSelection();
   }
 
   function queueAutosave() {
@@ -73,16 +70,13 @@ export function createWritingSlice(state: AppState, options: WritingSliceOptions
       state.writingSurfaceMode.value === "live" ? "source" : "live";
   }
 
-  function setTypewriterMode(enabled: boolean) {
-    state.typewriterMode.value = enabled;
-  }
-
-  function setFocusMode(enabled: boolean) {
-    state.focusMode.value = enabled;
-  }
-
-  function updateWritingSelection(text: string) {
-    state.selectedWordCount.value = countWords(text);
+  function updateWritingSelection(selection: string | WritingSelection) {
+    const nextSelection =
+      typeof selection === "string"
+        ? { ...emptyWritingSelection(), text: selection }
+        : selection;
+    state.writingSelection.value = nextSelection;
+    state.selectedWordCount.value = countWords(nextSelection.text);
   }
 
   function updateDraftContent(content: string) {
@@ -128,7 +122,7 @@ export function createWritingSlice(state: AppState, options: WritingSliceOptions
       const error = toMdvError(reason, "Could not insert this image.");
       state.saveStatus.value = "error";
       state.saveError.value = error.message;
-      return true;
+      return false;
     }
   }
 
@@ -194,26 +188,11 @@ export function createWritingSlice(state: AppState, options: WritingSliceOptions
     resetWritingForDocument,
     saveCurrentDocument,
     setEditorMode,
-    setFocusMode,
-    setTypewriterMode,
     setWritingSurfaceMode,
     toggleWritingSurfaceMode,
     updateDraftContent,
     updateWritingSelection,
   };
-}
-
-function countWords(value: string) {
-  const words = value.match(/[\p{L}\p{N}_'-]+/gu);
-  return words?.length ?? 0;
-}
-
-function isImagePath(path: string) {
-  return /\.(avif|gif|jpe?g|png|svg|webp)$/i.test(path);
-}
-
-function fileNameFromPath(path: string) {
-  return path.split(/[\\/]/).filter(Boolean).pop() ?? "image";
 }
 
 function escapeAltText(value: string) {

@@ -1,6 +1,9 @@
 import { computed, ref } from "vue";
 import { DEFAULT_READER_PREFERENCES } from "../lib/preferences";
+import { countWords, emptyWritingSelection } from "../lib/text";
 import type {
+  AiNoteThread,
+  AiPanelMode,
   AiContextItem,
   DirectoryDocument,
   DocumentPayload,
@@ -10,6 +13,7 @@ import type {
   OutlineHeading,
   ReaderPreferences,
   SaveStatus,
+  WritingSelection,
   WritingSurfaceMode,
 } from "../lib/types";
 
@@ -30,6 +34,8 @@ export function createAppState() {
   const directoryDocuments = ref<DirectoryDocument[]>([]);
   const aiContextItems = ref<AiContextItem[]>([]);
   const aiAnswer = ref("");
+  const aiLastPrompt = ref("");
+  const aiPanelMode = ref<AiPanelMode>("ask");
   const aiStatus = ref<"idle" | "streaming" | "error">("idle");
   const aiError = ref<string | null>(null);
   const selectionChip = ref<{ text: string; x: number; y: number } | null>(null);
@@ -41,13 +47,18 @@ export function createAppState() {
   const saveError = ref<string | null>(null);
   const lastSavedModifiedMillis = ref<number | null>(null);
   const writingSurfaceMode = ref<WritingSurfaceMode>("live");
-  const typewriterMode = ref(false);
-  const focusMode = ref(false);
   const selectedWordCount = ref(0);
+  const writingSelection = ref<WritingSelection>(emptyWritingSelection());
 
   const noMarkdown = computed(() => error.value?.kind === "NoMarkdownFiles");
   const documentBookmarks = computed(() =>
     document.value ? (preferences.value.bookmarks[document.value.path] ?? []) : [],
+  );
+  const documentAiNotes = computed<AiNoteThread[]>(() =>
+    document.value ? (preferences.value.aiNotes[document.value.path] ?? []) : [],
+  );
+  const unresolvedAiNoteCount = computed(
+    () => documentAiNotes.value.filter((note) => !note.resolved).length,
   );
   const bookmarkedHeadingIds = computed(
     () =>
@@ -81,6 +92,8 @@ export function createAppState() {
     directoryDocuments,
     aiContextItems,
     aiAnswer,
+    aiLastPrompt,
+    aiPanelMode,
     aiStatus,
     aiError,
     selectionChip,
@@ -92,11 +105,12 @@ export function createAppState() {
     saveError,
     lastSavedModifiedMillis,
     writingSurfaceMode,
-    typewriterMode,
-    focusMode,
     selectedWordCount,
+    writingSelection,
     noMarkdown,
     documentBookmarks,
+    documentAiNotes,
+    unresolvedAiNoteCount,
     bookmarkedHeadingIds,
     dirty,
     wordCount,
@@ -104,8 +118,3 @@ export function createAppState() {
 }
 
 export type AppState = ReturnType<typeof createAppState>;
-
-function countWords(value: string) {
-  const words = value.match(/[\p{L}\p{N}_'-]+/gu);
-  return words?.length ?? 0;
-}

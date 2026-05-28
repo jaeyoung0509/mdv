@@ -5,19 +5,19 @@ import { EditorState } from "@codemirror/state";
 import { basicSetup, EditorView } from "codemirror";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { getReaderStyleProperties } from "../lib/readerSettings";
-import type { EffectiveTheme, ReaderPreferences } from "../lib/types";
+import type { AiNoteThread, EffectiveTheme, ReaderPreferences, WritingSelection } from "../lib/types";
 
 const props = defineProps<{
+  aiNotes: AiNoteThread[];
   content: string;
-  focusMode: boolean;
   preferences: ReaderPreferences;
   theme: EffectiveTheme;
-  typewriterMode: boolean;
 }>();
 
 const emit = defineEmits<{
+  aiNoteSelect: [note: AiNoteThread];
   contentChange: [content: string];
-  selectionChange: [text: string];
+  selectionChange: [selection: WritingSelection];
 }>();
 
 const sourceRoot = ref<HTMLElement | null>(null);
@@ -25,11 +25,22 @@ const readerStyle = computed(() => getReaderStyleProperties(props.preferences));
 let view: EditorView | null = null;
 let applyingExternalContent = false;
 
-function selectedText(state: EditorState) {
-  return state.selection.ranges
+function currentSelection(state: EditorState): WritingSelection {
+  const text = state.selection.ranges
     .filter((range) => !range.empty)
     .map((range) => state.sliceDoc(range.from, range.to))
     .join("\n");
+  const main = state.selection.main;
+  const fromLine = state.doc.lineAt(main.from);
+  const toLine = state.doc.lineAt(main.to);
+
+  return {
+    text,
+    from: main.from,
+    to: main.to,
+    fromLine: fromLine.number,
+    toLine: toLine.number,
+  };
 }
 
 function emitSelection() {
@@ -37,26 +48,7 @@ function emitSelection() {
     return;
   }
 
-  emit("selectionChange", selectedText(view.state));
-}
-
-function keepCaretCentered() {
-  if (!view || !props.typewriterMode) {
-    return;
-  }
-
-  const coords = view.coordsAtPos(view.state.selection.main.head);
-
-  if (!coords) {
-    return;
-  }
-
-  const target = window.innerHeight * 0.42;
-  const delta = coords.top - target;
-
-  if (Math.abs(delta) > 48) {
-    window.scrollBy({ top: delta, behavior: "smooth" });
-  }
+  emit("selectionChange", currentSelection(view.state));
 }
 
 function plainTextPasteHandler(event: ClipboardEvent, editorView: EditorView) {
@@ -69,6 +61,38 @@ function plainTextPasteHandler(event: ClipboardEvent, editorView: EditorView) {
   event.preventDefault();
   editorView.dispatch(editorView.state.replaceSelection(text));
   return true;
+}
+
+function clearLineNoteMarkers() {
+  sourceRoot.value
+    ?.querySelectorAll(".source-note-marker")
+    .forEach((marker) => marker.remove());
+}
+
+function syncLineNoteMarkers() {
+  if (!view || !sourceRoot.value) {
+    return;
+  }
+
+  clearLineNoteMarkers();
+
+  for (const note of props.aiNotes) {
+    if (note.resolved || note.anchor.kind !== "lineRange") {
+      continue;
+    }
+
+    const lineNumber = Math.min(Math.max(note.anchor.fromLine, 1), view.state.doc.lines);
+    const line = view.state.doc.line(lineNumber);
+    const block = view.lineBlockAt(line.from);
+    const marker = document.createElement("button");
+    marker.type = "button";
+    marker.className = "source-note-marker";
+    marker.title = note.title;
+    marker.textContent = String(props.aiNotes.indexOf(note) + 1);
+    marker.style.top = `${block.top}px`;
+    marker.onclick = () => emit("aiNoteSelect", note);
+    sourceRoot.value.append(marker);
+  }
 }
 
 function mountSourceEditor() {
@@ -91,8 +115,8 @@ function mountSourceEditor() {
           }
 
           if (update.docChanged || update.selectionSet) {
-            emit("selectionChange", selectedText(update.state));
-            keepCaretCentered();
+            emit("selectionChange", currentSelection(update.state));
+            void nextTick(syncLineNoteMarkers);
           }
         }),
         EditorView.domEventHandlers({
@@ -104,6 +128,7 @@ function mountSourceEditor() {
 
   view.focus();
   emitSelection();
+  void nextTick(syncLineNoteMarkers);
 }
 
 watch(
@@ -122,15 +147,14 @@ watch(
       },
     });
     applyingExternalContent = false;
+    void nextTick(syncLineNoteMarkers);
   },
 );
 
 watch(
-  () => props.typewriterMode,
-  async () => {
-    await nextTick();
-    keepCaretCentered();
-  },
+  () => props.aiNotes,
+  () => void nextTick(syncLineNoteMarkers),
+  { deep: true },
 );
 
 onMounted(() => {
@@ -138,7 +162,14 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
-  emit("selectionChange", "");
+  emit("selectionChange", {
+    text: "",
+    from: null,
+    to: null,
+    fromLine: null,
+    toLine: null,
+  });
+  clearLineNoteMarkers();
   view?.destroy();
   view = null;
 });
@@ -147,11 +178,7 @@ onBeforeUnmount(() => {
 <template>
   <div
     ref="sourceRoot"
-    :class="[
-      'markdown-source-editor',
-      focusMode ? 'markdown-source-editor--focus' : '',
-      typewriterMode ? 'markdown-source-editor--typewriter' : '',
-    ]"
+    class="markdown-source-editor"
     :data-theme="theme"
     :style="readerStyle"
     aria-label="Markdown source editor"

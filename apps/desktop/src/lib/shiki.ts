@@ -41,32 +41,37 @@ function normalizeLanguage(language: string | undefined): string {
 }
 
 async function getHighlighter(): Promise<HighlighterCore> {
-  highlighterPromise ??= createHighlighterCore({
-    themes: [githubLight, githubDark],
-    langs: [
-      typescript,
-      tsx,
-      javascript,
-      jsx,
-      go,
-      rust,
-      python,
-      java,
-      kotlin,
-      swift,
-      sql,
-      bash,
-      shellscript,
-      json,
-      yaml,
-      toml,
-      docker,
-      markdown,
-      html,
-      css,
-    ],
-    engine: createJavaScriptRegexEngine(),
-  });
+  if (!highlighterPromise) {
+    highlighterPromise = createHighlighterCore({
+      themes: [githubLight, githubDark],
+      langs: [
+        typescript,
+        tsx,
+        javascript,
+        jsx,
+        go,
+        rust,
+        python,
+        java,
+        kotlin,
+        swift,
+        sql,
+        bash,
+        shellscript,
+        json,
+        yaml,
+        toml,
+        docker,
+        markdown,
+        html,
+        css,
+      ],
+      engine: createJavaScriptRegexEngine(),
+    }).catch((error) => {
+      highlighterPromise = null;
+      throw error;
+    });
+  }
 
   return highlighterPromise;
 }

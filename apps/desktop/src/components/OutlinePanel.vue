@@ -1,22 +1,26 @@
 <script setup lang="ts">
-import { Bookmark, Trash2, X } from "@lucide/vue";
+import { Bookmark, CheckCircle2, MessageSquareText, Trash2, X } from "@lucide/vue";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
-import type { OutlineHeading, ReaderBookmark } from "../lib/types";
+import type { AiNoteThread, OutlineHeading, ReaderBookmark } from "../lib/types";
 
 const props = defineProps<{
+  aiNotes: AiNoteThread[];
   bookmarks: ReaderBookmark[];
   headings: OutlineHeading[];
   open: boolean;
 }>();
 
 const emit = defineEmits<{
+  aiNoteRemove: [noteId: string];
+  aiNoteResolve: [noteId: string, resolved: boolean];
+  aiNoteSelect: [note: AiNoteThread];
   bookmarkRemove: [bookmarkId: string];
   bookmarkSelect: [bookmark: ReaderBookmark];
   close: [];
 }>();
 
 const activeId = ref<string | null>(null);
-const activeTab = ref<"outline" | "bookmarks">("outline");
+const activeTab = ref<"outline" | "bookmarks" | "aiNotes">("outline");
 let observer: IntersectionObserver | null = null;
 
 const orderedBookmarks = computed(() => {
@@ -39,6 +43,34 @@ const orderedBookmarks = computed(() => {
     return leftIndex - rightIndex || leftOffset - rightOffset || left.createdAt - right.createdAt;
   });
 });
+const groupedAiNotes = computed(() => {
+  const headingOrder = new Map(props.headings.map((heading, index) => [heading.id, index]));
+
+  return [...props.aiNotes].sort((left, right) => {
+    const leftIndex =
+      left.anchor.kind === "heading"
+        ? (headingOrder.get(left.anchor.headingId) ?? Number.MAX_SAFE_INTEGER)
+        : Number.MAX_SAFE_INTEGER;
+    const rightIndex =
+      right.anchor.kind === "heading"
+        ? (headingOrder.get(right.anchor.headingId) ?? Number.MAX_SAFE_INTEGER)
+        : Number.MAX_SAFE_INTEGER;
+    const leftLine = left.anchor.kind === "lineRange" ? left.anchor.fromLine : Number.MAX_SAFE_INTEGER;
+    const rightLine = right.anchor.kind === "lineRange" ? right.anchor.fromLine : Number.MAX_SAFE_INTEGER;
+
+    return leftIndex - rightIndex || leftLine - rightLine || right.updatedAt - left.updatedAt;
+  });
+});
+
+function aiNoteAnchorLabel(note: AiNoteThread): string {
+  if (note.anchor.kind === "lineRange") {
+    return note.anchor.fromLine === note.anchor.toLine
+      ? `Line ${note.anchor.fromLine}`
+      : `Lines ${note.anchor.fromLine}-${note.anchor.toLine}`;
+  }
+
+  return note.anchor.label;
+}
 
 function scrollToHeading(id: string): void {
   const element = document.getElementById(id);
@@ -154,6 +186,15 @@ onBeforeUnmount(teardownObserver);
         Bookmarks
         <span>{{ bookmarks.length }}</span>
       </button>
+      <button
+        type="button"
+        role="tab"
+        :aria-selected="activeTab === 'aiNotes'"
+        @click="activeTab = 'aiNotes'"
+      >
+        AI Notes
+        <span>{{ aiNotes.length }}</span>
+      </button>
     </div>
 
     <template v-if="activeTab === 'outline'">
@@ -173,7 +214,7 @@ onBeforeUnmount(teardownObserver);
       <p v-else class="outline-empty">No headings</p>
     </template>
 
-    <template v-else>
+    <template v-else-if="activeTab === 'bookmarks'">
       <div v-if="orderedBookmarks.length > 0" class="bookmark-list">
         <div v-for="bookmark in orderedBookmarks" :key="bookmark.id" class="bookmark-row">
           <button
@@ -196,6 +237,47 @@ onBeforeUnmount(teardownObserver);
         </div>
       </div>
       <p v-else class="outline-empty">No bookmarks</p>
+    </template>
+
+    <template v-else>
+      <div v-if="groupedAiNotes.length > 0" class="ai-note-list">
+        <div
+          v-for="note in groupedAiNotes"
+          :key="note.id"
+          class="ai-note-row"
+          :data-resolved="note.resolved"
+        >
+          <button
+            type="button"
+            class="ai-note-row__jump"
+            :title="note.title"
+            @click="emit('aiNoteSelect', note)"
+          >
+            <MessageSquareText :size="13" aria-hidden="true" />
+            <span>{{ note.title }}</span>
+            <small>{{ aiNoteAnchorLabel(note) }}</small>
+          </button>
+          <div class="ai-note-row__actions">
+            <button
+              type="button"
+              class="icon-button"
+              :title="note.resolved ? 'Reopen AI note' : 'Resolve AI note'"
+              @click="emit('aiNoteResolve', note.id, !note.resolved)"
+            >
+              <CheckCircle2 :size="13" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              class="icon-button"
+              title="Remove AI note"
+              @click="emit('aiNoteRemove', note.id)"
+            >
+              <Trash2 :size="13" aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+      </div>
+      <p v-else class="outline-empty">No AI notes</p>
     </template>
   </aside>
 </template>
